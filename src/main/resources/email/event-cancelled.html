@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sự kiện đã bị hủy - TicketGo</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5; line-height: 1.6; }
+        .email-container { max-width: 600px; margin: 0 auto; background-color: #ffffff; }
+        .header { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); padding: 30px; text-align: center; }
+        .header h1 { color: #ffffff; font-size: 24px; font-weight: 600; }
+        .header .icon { font-size: 48px; margin-bottom: 10px; }
+        .content { padding: 40px 30px; }
+        .greeting { font-size: 18px; color: #1f2937; margin-bottom: 20px; }
+        .message { color: #4b5563; margin-bottom: 25px; }
+        .warning-box { background-color: #fee2e2; border-left: 4px solid #ef4444; padding: 20px; margin: 25px 0; border-radius: 0 8px 8px 0; color: #991b1b; }
+        .event-info { background-color: #f9fafb; border-radius: 12px; padding: 25px; margin: 25px 0; }
+        .info-box { background-color: #dbeafe; border-left: 4px solid #3b82f6; padding: 15px 20px; margin: 25px 0; border-radius: 0 8px 8px 0; color: #1e40af; font-size: 14px; }
+        .footer { background-color: #1f2937; color: #9ca3af; padding: 30px; text-align: center; font-size: 14px; }
+        .footer a { color: #a5b4fc; text-decoration: none; }
+        .divider { height: 1px; background-color: #e5e7eb; margin: 25px 0; }
+    </style>
+</head>
+<body>
+<div class="email-container">
+    <div class="header">
+        <div class="icon">⚠️</div>
+        <h1>Sự kiện đã bị hủy</h1>
+    </div>
+
+    <div class="content">
+        <p class="greeting">Xin chào <strong th:text="${ticket.holderName}">Khách hàng</strong>,</p>
+
+        <p class="message">
+            Chúng tôi rất tiếc phải thông báo rằng sự kiện bạn đã đặt vé đã bị hủy.
+        </p>
+
+        <div class="warning-box">
+            <strong>📋 Lý do hủy:</strong><br>
+            <span th:text="${reason}">Lý do từ ban tổ chức</span>
+        </div>
+
+        <div class="event-info">
+            <h4 style="margin-bottom: 15px; color: #1f2937;" th:text="${event.title}">Tên sự kiện</h4>
+            <p style="color: #6b7280; font-size: 14px;">
+                📅 <span th:text="${#temporals.format(event.startDate, 'dd/MM/yyyy HH:mm')}">01/01/2024</span><br>
+                📍 <span th:text="${event.venue}">Địa điểm</span>
+            </p>
+        </div>
+
+        <div class="info-box">
+            <strong>💰 Về việc hoàn tiền:</strong><br>
+            Tiền vé sẽ được hoàn lại trong vòng 5-7 ngày làm việc về phương thức thanh toán ban đầu của bạn.
+        </div>
+
+        <p class="message" style="font-size: 14px;">
+            Chúng tôi thành thật xin lỗi vì sự bất tiện này. Hy vọng bạn sẽ tiếp tục đồng hành cùng TicketGo trong các sự kiện tiếp theo.
+        </p>
+    </div>
+
+    <div class="footer">
+        <p>Cảm ơn sự thông cảm của bạn!</p>
+        <div class="divider" style="background-color: #374151;"></div>
+        <p>
+            📧 <a th:href="'mailto:' + ${supportEmail}" th:text="${supportEmail}">support@ticketgo.vn</a> |
+            📞 <span th:text="${hotline}">1900 1234</span>
+        </p>
+    </div>
+</div>
+</body>
+</html>

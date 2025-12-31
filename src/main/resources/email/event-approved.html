@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sự kiện đã được duyệt - TicketGo</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5; line-height: 1.6; }
+        .email-container { max-width: 600px; margin: 0 auto; background-color: #ffffff; }
+        .header { background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 30px; text-align: center; }
+        .header h1 { color: #ffffff; font-size: 24px; font-weight: 600; }
+        .header .icon { font-size: 48px; margin-bottom: 10px; }
+        .content { padding: 40px 30px; }
+        .greeting { font-size: 18px; color: #1f2937; margin-bottom: 20px; }
+        .message { color: #4b5563; margin-bottom: 25px; }
+        .success-box { background-color: #d1fae5; border-radius: 16px; padding: 25px; text-align: center; margin: 25px 0; }
+        .event-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; padding: 25px; color: #ffffff; margin: 25px 0; }
+        .event-title { font-size: 20px; font-weight: 600; margin-bottom: 15px; }
+        .event-detail { margin-bottom: 10px; font-size: 14px; }
+        .next-steps { background-color: #f9fafb; border-radius: 12px; padding: 25px; margin: 25px 0; }
+        .step-item { display: flex; margin-bottom: 15px; }
+        .step-number { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: white; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; margin-right: 15px; flex-shrink: 0; }
+        .step-content { color: #4b5563; }
+        .btn { display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: #ffffff !important; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; margin: 20px 0; }
+        .footer { background-color: #1f2937; color: #9ca3af; padding: 30px; text-align: center; font-size: 14px; }
+        .footer a { color: #a5b4fc; text-decoration: none; }
+        .divider { height: 1px; background-color: #e5e7eb; margin: 25px 0; }
+    </style>
+</head>
+<body>
+<div class="email-container">
+    <div class="header">
+        <div class="icon">✅</div>
+        <h1>Sự kiện đã được duyệt!</h1>
+    </div>
+
+    <div class="content">
+        <p class="greeting">Xin chào <strong th:text="${organizer.fullName}">Organizer</strong>,</p>
+
+        <div class="success-box">
+            <div style="font-size: 48px; margin-bottom: 15px;">🎉</div>
+            <p style="color: #065f46; font-size: 18px; font-weight: 600;">
+                Chúc mừng! Sự kiện của bạn đã được phê duyệt và sẵn sàng bán vé!
+            </p>
+        </div>
+
+        <!-- Event Info -->
+        <div class="event-card">
+            <div class="event-title" th:text="${event.title}">Tên sự kiện</div>
+            <div class="event-detail">📅 <span th:text="${#temporals.format(event.startDate, 'dd/MM/yyyy HH:mm')}">01/01/2024 19:00</span></div>
+            <div class="event-detail">📍 <span th:text="${event.venue}">Địa điểm</span></div>
+            <div class="event-detail">🏠 <span th:text="${event.address}">Địa chỉ</span></div>
+        </div>
+
+        <!-- Next Steps -->
+        <div class="next-steps">
+            <h4 style="margin-bottom: 20px; color: #1f2937;">📋 Các bước tiếp theo</h4>
+
+            <div class="step-item">
+                <div class="step-number">1</div>
+                <div class="step-content">
+                    <strong>Kiểm tra thông tin sự kiện</strong><br>
+                    Đảm bảo mọi thông tin hiển thị chính xác
+                </div>
+            </div>
+            <div class="step-item">
+                <div class="step-number">2</div>
+                <div class="step-content">
+                    <strong>Quảng bá sự kiện</strong><br>
+                    Chia sẻ link sự kiện trên các kênh của bạn
+                </div>
+            </div>
+            <div class="step-item">
+                <div class="step-number">3</div>
+                <div class="step-content">
+                    <strong>Theo dõi doanh số</strong><br>
+                    Xem báo cáo bán vé trên Dashboard
+                </div>
+            </div>
+        </div>
+
+        <p style="text-align: center;">
+            <a th:href="${eventUrl}" class="btn">📊 Quản lý sự kiện</a>
+        </p>
+    </div>
+
+    <div class="footer">
+        <p>Chúc bạn tổ chức sự kiện thành công!</p>
+        <div class="divider" style="background-color: #374151;"></div>
+        <p>
+            📧 <a th:href="'mailto:' + ${supportEmail}" th:text="${supportEmail}">support@ticketgo.vn</a> |
+            📞 <span th:text="${hotline}">1900 1234</span>
+        </p>
+    </div>
+</div>
+</body>
+</html>

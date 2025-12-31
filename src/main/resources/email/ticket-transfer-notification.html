@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chuyển nhượng vé thành công - TicketGo</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5; line-height: 1.6; }
+        .email-container { max-width: 600px; margin: 0 auto; background-color: #ffffff; }
+        .header { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); padding: 30px; text-align: center; }
+        .header h1 { color: #ffffff; font-size: 24px; font-weight: 600; }
+        .header .icon { font-size: 48px; margin-bottom: 10px; }
+        .content { padding: 40px 30px; }
+        .greeting { font-size: 18px; color: #1f2937; margin-bottom: 20px; }
+        .message { color: #4b5563; margin-bottom: 25px; }
+        .success-box { background-color: #d1fae5; border-left: 4px solid #10b981; padding: 20px; margin: 25px 0; border-radius: 0 8px 8px 0; }
+        .transfer-details { background-color: #f9fafb; border-radius: 12px; padding: 25px; margin: 25px 0; }
+        .detail-row { display: table; width: 100%; margin-bottom: 15px; }
+        .detail-label { display: table-cell; color: #6b7280; width: 40%; }
+        .detail-value { display: table-cell; color: #1f2937; font-weight: 500; }
+        .event-summary { background-color: #f3f4f6; border-radius: 8px; padding: 15px; margin-top: 20px; }
+        .footer { background-color: #1f2937; color: #9ca3af; padding: 30px; text-align: center; font-size: 14px; }
+        .footer a { color: #a5b4fc; text-decoration: none; }
+        .divider { height: 1px; background-color: #e5e7eb; margin: 25px 0; }
+    </style>
+</head>
+<body>
+<div class="email-container">
+    <!-- Header -->
+    <div class="header">
+        <div class="icon">✅</div>
+        <h1>Chuyển nhượng thành công!</h1>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+        <p class="greeting">Xin chào,</p>
+
+        <p class="message">
+            Bạn đã chuyển nhượng vé thành công. Dưới đây là chi tiết giao dịch:
+        </p>
+
+        <div class="success-box">
+            <strong style="color: #065f46;">🎉 Vé đã được chuyển thành công!</strong>
+        </div>
+
+        <!-- Transfer Details -->
+        <div class="transfer-details">
+            <h4 style="margin-bottom: 20px; color: #1f2937;">Chi tiết chuyển nhượng</h4>
+
+            <div class="detail-row">
+                <span class="detail-label">Mã vé</span>
+                <span class="detail-value" th:text="${ticket.ticketCode}">TK123456</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Người nhận</span>
+                <span class="detail-value" th:text="${newHolderName}">Nguyễn Văn B</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Email người nhận</span>
+                <span class="detail-value" th:text="${newHolderEmail}">newowner@email.com</span>
+            </div>
+
+            <div class="event-summary">
+                <strong th:text="${event.title}">Tên sự kiện</strong><br>
+                <span style="color: #6b7280; font-size: 14px;">
+                        📅 <span th:text="${#temporals.format(event.startDate, 'dd/MM/yyyy HH:mm')}">01/01/2024 19:00</span><br>
+                        📍 <span th:text="${event.venue}">Địa điểm</span>
+                    </span>
+            </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <p class="message" style="font-size: 14px; color: #6b7280;">
+            Vé đã được chuyển thành công và bạn không còn quyền sử dụng vé này nữa.
+            Người nhận sẽ nhận được email thông báo kèm vé điện tử mới.
+        </p>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+        <p>Cảm ơn bạn đã sử dụng TicketGo!</p>
+        <div class="divider" style="background-color: #374151;"></div>
+        <p>
+            Cần hỗ trợ? Liên hệ chúng tôi:<br>
+            📧 <a th:href="'mailto:' + ${supportEmail}" th:text="${supportEmail}">support@ticketgo.vn</a><br>
+            📞 <span th:text="${hotline}">1900 1234</span>
+        </p>
+        <p style="margin-top: 20px; font-size: 12px; color: #6b7280;">
+            © <span th:text="${currentYear}">2024</span> TicketGo. All rights reserved.
+        </p>
+    </div>
+</div>
+</body>
+</html>

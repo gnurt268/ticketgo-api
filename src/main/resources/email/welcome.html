@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chào mừng đến với TicketGo</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5; line-height: 1.6; }
+        .email-container { max-width: 600px; margin: 0 auto; background-color: #ffffff; }
+        .header { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); padding: 40px 30px; text-align: center; }
+        .header h1 { color: #ffffff; font-size: 28px; font-weight: 600; }
+        .header .icon { font-size: 64px; margin-bottom: 15px; }
+        .header p { color: rgba(255,255,255,0.9); margin-top: 10px; }
+        .content { padding: 40px 30px; }
+        .greeting { font-size: 20px; color: #1f2937; margin-bottom: 20px; }
+        .message { color: #4b5563; margin-bottom: 25px; font-size: 16px; }
+        .features { margin: 30px 0; }
+        .feature-item { display: table; width: 100%; margin-bottom: 20px; }
+        .feature-icon { display: table-cell; width: 60px; vertical-align: top; font-size: 32px; }
+        .feature-content { display: table-cell; vertical-align: top; }
+        .feature-title { font-weight: 600; color: #1f2937; margin-bottom: 5px; }
+        .feature-desc { color: #6b7280; font-size: 14px; }
+        .cta-section { background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border-radius: 16px; padding: 30px; text-align: center; margin: 30px 0; }
+        .btn { display: inline-block; padding: 16px 40px; background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: #ffffff !important; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 18px; margin: 10px 0; }
+        .btn:hover { opacity: 0.9; }
+        .stats { display: table; width: 100%; margin: 30px 0; text-align: center; }
+        .stat-item { display: table-cell; padding: 20px; }
+        .stat-number { font-size: 32px; font-weight: bold; color: #6366f1; }
+        .stat-label { color: #6b7280; font-size: 14px; margin-top: 5px; }
+        .footer { background-color: #1f2937; color: #9ca3af; padding: 30px; text-align: center; font-size: 14px; }
+        .footer a { color: #a5b4fc; text-decoration: none; }
+        .social-links { margin: 20px 0; }
+        .social-links a { display: inline-block; margin: 0 10px; font-size: 24px; }
+        .divider { height: 1px; background-color: #e5e7eb; margin: 25px 0; }
+    </style>
+</head>
+<body>
+<div class="email-container">
+    <!-- Header -->
+    <div class="header">
+        <div class="icon">🎉</div>
+        <h1>Chào mừng đến với TicketGo!</h1>
+        <p>Nền tảng đặt vé sự kiện hàng đầu Việt Nam</p>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+        <p class="greeting">Xin chào <strong th:text="${user.fullName}">Bạn</strong>,</p>
+
+        <p class="message">
+            Cảm ơn bạn đã tạo tài khoản TicketGo! Bạn đã sẵn sàng khám phá hàng ngàn sự kiện hấp dẫn và đặt vé chỉ trong vài giây.
+        </p>
+
+        <!-- Features -->
+        <div class="features">
+            <div class="feature-item">
+                <div class="feature-icon">🎫</div>
+                <div class="feature-content">
+                    <div class="feature-title">Đặt vé dễ dàng</div>
+                    <div class="feature-desc">Tìm kiếm và đặt vé sự kiện yêu thích chỉ với vài thao tác đơn giản</div>
+                </div>
+            </div>
+            <div class="feature-item">
+                <div class="feature-icon">📱</div>
+                <div class="feature-content">
+                    <div class="feature-title">Vé điện tử thông minh</div>
+                    <div class="feature-desc">QR Code check-in nhanh chóng, không cần in vé giấy</div>
+                </div>
+            </div>
+            <div class="feature-item">
+                <div class="feature-icon">🔒</div>
+                <div class="feature-content">
+                    <div class="feature-title">Thanh toán an toàn</div>
+                    <div class="feature-desc">Hỗ trợ nhiều phương thức thanh toán với bảo mật cao nhất</div>
+                </div>
+            </div>
+            <div class="feature-item">
+                <div class="feature-icon">🤖</div>
+                <div class="feature-content">
+                    <div class="feature-title">Công nghệ AI</div>
+                    <div class="feature-desc">Gợi ý sự kiện phù hợp và check-in bằng nhận diện khuôn mặt</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CTA Section -->
+        <div class="cta-section">
+            <h3 style="color: #1f2937; margin-bottom: 15px;">🔥 Khám phá sự kiện hot ngay!</h3>
+            <p style="color: #6b7280; margin-bottom: 20px;">
+                Hàng trăm sự kiện đang chờ bạn - Concert, Workshop, Thể thao, và nhiều hơn nữa!
+            </p>
+            <a th:href="${exploreUrl}" class="btn">🎭 Xem sự kiện</a>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats">
+            <div class="stat-item">
+                <div class="stat-number">1000+</div>
+                <div class="stat-label">Sự kiện</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">50K+</div>
+                <div class="stat-label">Người dùng</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">100K+</div>
+                <div class="stat-label">Vé đã bán</div>
+            </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <p class="message" style="text-align: center; font-size: 14px;">
+            Có thắc mắc? Đội ngũ hỗ trợ của chúng tôi luôn sẵn sàng giúp đỡ bạn 24/7!
+        </p>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+        <div class="social-links">
+            <a href="#">📘</a>
+            <a href="#">📸</a>
+            <a href="#">🐦</a>
+            <a href="#">📺</a>
+        </div>
+        <p>Theo dõi chúng tôi để cập nhật những sự kiện mới nhất!</p>
+        <div class="divider" style="background-color: #374151;"></div>
+        <p>
+            Cần hỗ trợ? Liên hệ chúng tôi:<br>
+            📧 <a th:href="'mailto:' + ${supportEmail}" th:text="${supportEmail}">support@ticketgo.vn</a><br>
+            📞 <span th:text="${hotline}">1900 1234</span>
+        </p>
+        <p style="margin-top: 20px; font-size: 12px; color: #6b7280;">
+            © <span th:text="${currentYear}">2024</span> TicketGo. All rights reserved.<br>
+            <a th:href="${frontendUrl} + '/unsubscribe'">Hủy đăng ký nhận email</a>
+        </p>
+    </div>
+</div>
+</body>
+</html>

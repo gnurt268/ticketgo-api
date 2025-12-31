@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nhắc nhở sự kiện - TicketGo</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5; line-height: 1.6; }
+        .email-container { max-width: 600px; margin: 0 auto; background-color: #ffffff; }
+        .header { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 30px; text-align: center; }
+        .header h1 { color: #ffffff; font-size: 24px; font-weight: 600; }
+        .header .icon { font-size: 48px; margin-bottom: 10px; }
+        .content { padding: 40px 30px; }
+        .greeting { font-size: 18px; color: #1f2937; margin-bottom: 20px; }
+        .message { color: #4b5563; margin-bottom: 25px; }
+        .countdown-box { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-radius: 16px; padding: 30px; text-align: center; margin: 25px 0; }
+        .countdown-title { font-size: 16px; color: #92400e; margin-bottom: 10px; }
+        .countdown-time { font-size: 36px; font-weight: bold; color: #d97706; }
+        .event-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; padding: 25px; color: #ffffff; margin: 25px 0; }
+        .event-title { font-size: 20px; font-weight: 600; margin-bottom: 15px; }
+        .event-detail { margin-bottom: 10px; font-size: 14px; }
+        .ticket-summary { background-color: #f9fafb; border-radius: 12px; padding: 20px; margin: 25px 0; text-align: center; }
+        .qr-code { max-width: 150px; margin: 15px auto; display: block; }
+        .ticket-code { font-size: 20px; font-weight: bold; color: #6366f1; letter-spacing: 2px; }
+        .btn { display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: #ffffff !important; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; margin: 20px 0; }
+        .checklist { background-color: #f0fdf4; border-radius: 12px; padding: 25px; margin: 25px 0; }
+        .checklist-item { display: flex; align-items: center; margin-bottom: 12px; color: #166534; }
+        .checklist-icon { margin-right: 10px; font-size: 18px; }
+        .footer { background-color: #1f2937; color: #9ca3af; padding: 30px; text-align: center; font-size: 14px; }
+        .footer a { color: #a5b4fc; text-decoration: none; }
+        .divider { height: 1px; background-color: #e5e7eb; margin: 25px 0; }
+    </style>
+</head>
+<body>
+<div class="email-container">
+    <!-- Header -->
+    <div class="header">
+        <div class="icon">⏰</div>
+        <h1>Sự kiện sắp diễn ra!</h1>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+        <p class="greeting">Xin chào <strong th:text="${ticket.holderName}">Khách hàng</strong>,</p>
+
+        <p class="message">
+            Đây là lời nhắc nhở rằng sự kiện bạn đăng ký sẽ diễn ra vào ngày mai. Đừng quên chuẩn bị nhé!
+        </p>
+
+        <!-- Countdown -->
+        <div class="countdown-box">
+            <div class="countdown-title">🗓️ Sự kiện diễn ra vào</div>
+            <div class="countdown-time" th:text="${eventDate} + ' lúc ' + ${eventTime}">01/01/2024 lúc 19:00</div>
+        </div>
+
+        <!-- Event Info -->
+        <div class="event-card">
+            <div class="event-title" th:text="${event.title}">Tên sự kiện</div>
+            <div class="event-detail">📅 <span th:text="${eventDate}">01/01/2024</span> - <span th:text="${eventTime}">19:00</span></div>
+            <div class="event-detail">📍 <span th:text="${event.venue}">Địa điểm</span></div>
+            <div class="event-detail">🏠 <span th:text="${event.address}">Địa chỉ</span></div>
+        </div>
+
+        <!-- Ticket Summary -->
+        <div class="ticket-summary">
+            <h4 style="margin-bottom: 15px; color: #1f2937;">Vé của bạn</h4>
+            <img th:src="${qrCodeBase64}" alt="QR Code" class="qr-code">
+            <div class="ticket-code" th:text="${ticket.ticketCode}">TK123456</div>
+            <p style="color: #6b7280; margin-top: 10px;">
+                Khu vực: <strong th:text="${ticket.ticketZone.zoneName}">VIP</strong>
+                <span th:if="${ticket.seatNumber != null}">
+                        | Ghế: <strong th:text="${ticket.rowNumber + ticket.seatNumber}">A1</strong>
+                    </span>
+            </p>
+        </div>
+
+        <!-- Checklist -->
+        <div class="checklist">
+            <h4 style="margin-bottom: 15px; color: #166534;">✅ Checklist trước khi đi</h4>
+            <div class="checklist-item">
+                <span class="checklist-icon">📱</span>
+                <span>Chuẩn bị điện thoại để quét QR code</span>
+            </div>
+            <div class="checklist-item">
+                <span class="checklist-icon">🪪</span>
+                <span>Mang theo giấy tờ tùy thân</span>
+            </div>
+            <div class="checklist-item">
+                <span class="checklist-icon">⏰</span>
+                <span>Đến sớm 30 phút để làm thủ tục</span>
+            </div>
+            <div class="checklist-item">
+                <span class="checklist-icon">🗺️</span>
+                <span>Kiểm tra lại địa chỉ và đường đi</span>
+            </div>
+        </div>
+
+        <p style="text-align: center;">
+            <a th:href="${ticketUrl}" class="btn">📱 Xem vé của tôi</a>
+        </p>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+        <p>Chúc bạn có trải nghiệm tuyệt vời!</p>
+        <div class="divider" style="background-color: #374151;"></div>
+        <p>
+            Cần hỗ trợ? Liên hệ chúng tôi:<br>
+            📧 <a th:href="'mailto:' + ${supportEmail}" th:text="${supportEmail}">support@ticketgo.vn</a><br>
+            📞 <span th:text="${hotline}">1900 1234</span>
+        </p>
+        <p style="margin-top: 20px; font-size: 12px; color: #6b7280;">
+            © <span th:text="${currentYear}">2024</span> TicketGo. All rights reserved.
+        </p>
+    </div>
+</div>
+</body>
+</html>

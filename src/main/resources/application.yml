@@ -1,0 +1,94 @@
+spring:
+  application:
+    name: ticketgo-api
+
+  # Database
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+  datasource:
+    url: jdbc:mysql://localhost:3306/ticketgo
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:371902}
+    driver-class-name: com.mysql.jdbc.Driver
+
+  # Email
+  mail:
+    host: ${MAIL_HOST:}
+    port: ${MAIL_PORT:}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+
+  # Thymeleaf
+  thymeleaf:
+    prefix: classpath:/
+    suffix: .html
+    mode: HTML
+    encoding: UTF-8
+    cache: false  # Set true in production
+
+  # File upload
+  servlet:
+    multipart:
+      max-file-size: ${MAX_FILE_SIZE:}
+      max-request-size: ${MAX_FILE_SIZE:}
+  config:
+    import: optional:file:env.properties
+
+# JWT
+jwt:
+  secret: ${JWT_SECRET:}
+  expiration: 86400000
+  refresh-expiration: 604800000
+
+
+# VNPay
+vnpay:
+  tmn-code: ${VNPAY_TMN_CODE:}
+  hash-secret: ${VNPAY_HASH_SECRET:}
+  pay-url: ${VNPAY_URL:}
+  return-url: ${VNPAY_RETURN_URL:}
+
+# Application
+app:
+  base-url: ${APP_BASE_URL:}
+  frontend-url: ${APP_FRONTEND_URL:}
+
+  # Email config
+  email:
+    from-address: ${MAIL_USERNAME:noreply@ticketgo.vn}
+    from-name: TicketGo
+    support-email: support@ticketgo.vn
+    hotline: "1900 1234"
+    logo-url: ${APP_FRONTEND_URL:http://localhost:3000}/logo.png
+
+  # QR Code
+  qrcode:
+    width: ${QRCODE_WIDTH:300}
+    height: ${QRCODE_HEIGHT:300}
+    storage-path: ${QRCODE_STORAGE_PATH:uploads/qrcodes}
+    secret-key: ${QRCODE_SECRET_KEY}
+
+  # Upload
+  upload:
+    dir: ${UPLOAD_DIR:uploads}
+
+# Server
+server:
+  port: 8080
+
+# Logging
+logging:
+  level:
+    com.gnxrt.ticketgoapi: DEBUG
+    org.springframework.mail: DEBUG

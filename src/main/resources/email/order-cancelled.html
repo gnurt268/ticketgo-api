@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Đơn hàng đã bị hủy - TicketGo</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5; line-height: 1.6; }
+        .email-container { max-width: 600px; margin: 0 auto; background-color: #ffffff; }
+        .header { background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%); padding: 30px; text-align: center; }
+        .header h1 { color: #ffffff; font-size: 24px; font-weight: 600; }
+        .header .icon { font-size: 48px; margin-bottom: 10px; }
+        .content { padding: 40px 30px; }
+        .greeting { font-size: 18px; color: #1f2937; margin-bottom: 20px; }
+        .message { color: #4b5563; margin-bottom: 25px; }
+        .cancel-box { background-color: #f3f4f6; border-left: 4px solid #6b7280; padding: 20px; margin: 25px 0; border-radius: 0 8px 8px 0; }
+        .order-details { background-color: #f9fafb; border-radius: 12px; padding: 25px; margin: 25px 0; }
+        .detail-row { display: table; width: 100%; padding: 10px 0; border-bottom: 1px solid #e5e7eb; }
+        .detail-row:last-child { border-bottom: none; }
+        .detail-label { display: table-cell; color: #6b7280; width: 40%; }
+        .detail-value { display: table-cell; color: #1f2937; font-weight: 500; }
+        .btn { display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: #ffffff !important; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; margin: 20px 0; }
+        .footer { background-color: #1f2937; color: #9ca3af; padding: 30px; text-align: center; font-size: 14px; }
+        .footer a { color: #a5b4fc; text-decoration: none; }
+        .divider { height: 1px; background-color: #e5e7eb; margin: 25px 0; }
+    </style>
+</head>
+<body>
+<div class="email-container">
+    <div class="header">
+        <div class="icon">🚫</div>
+        <h1>Đơn hàng đã bị hủy</h1>
+    </div>
+
+    <div class="content">
+        <p class="greeting">Xin chào <strong th:text="${order.buyerName}">Khách hàng</strong>,</p>
+
+        <p class="message">Đơn hàng của bạn đã bị hủy. Dưới đây là chi tiết:</p>
+
+        <div class="cancel-box">
+            <strong>📋 Lý do hủy:</strong><br>
+            <span th:text="${reason}">Hết thời gian thanh toán</span>
+        </div>
+
+        <div class="order-details">
+            <div class="detail-row">
+                <span class="detail-label">Mã đơn hàng</span>
+                <span class="detail-value" th:text="${order.orderCode}">TG123456</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Sự kiện</span>
+                <span class="detail-value" th:text="${event.title}">Tên sự kiện</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Số tiền</span>
+                <span class="detail-value" th:text="${totalAmount}">500,000 ₫</span>
+            </div>
+        </div>
+
+        <p class="message" style="font-size: 14px;">
+            Nếu bạn đã thanh toán, tiền sẽ được hoàn lại trong vòng 5-7 ngày làm việc.
+        </p>
+
+        <p style="text-align: center;">
+            <a th:href="${frontendUrl} + '/events'" class="btn">🎭 Xem sự kiện khác</a>
+        </p>
+    </div>
+
+    <div class="footer">
+        <p>Cảm ơn bạn đã sử dụng TicketGo!</p>
+        <div class="divider" style="background-color: #374151;"></div>
+        <p>
+            📧 <a th:href="'mailto:' + ${supportEmail}" th:text="${supportEmail}">support@ticketgo.vn</a> |
+            📞 <span th:text="${hotline}">1900 1234</span>
+        </p>
+    </div>
+</div>
+</body>
+</html>

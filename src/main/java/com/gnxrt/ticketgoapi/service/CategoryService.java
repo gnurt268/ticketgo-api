@@ -1,0 +1,171 @@
+package com.gnxrt.ticketgoapi.service;
+
+import com.gnxrt.ticketgoapi.dto.request.category.CategoryRequest;
+import com.gnxrt.ticketgoapi.dto.response.category.CategoryDTO;
+import com.gnxrt.ticketgoapi.exception.BadRequestException;
+import com.gnxrt.ticketgoapi.exception.ConflictException;
+import com.gnxrt.ticketgoapi.exception.ResourceNotFoundException;
+import com.gnxrt.ticketgoapi.model.Category;
+import com.gnxrt.ticketgoapi.repository.CategoryRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class CategoryService {
+
+    private final CategoryRepository categoryRepository;
+
+    public List<CategoryDTO> getAllCategories() {
+        log.info("Getting all categories");
+        return categoryRepository.findAllByOrderByDisplayOrderAsc().stream()
+                .map(this::mapToDTO)
+                .collect(Collectors.toList());
+    }
+
+    public List<CategoryDTO> getActiveCategories() {
+        log.info("Getting active categories");
+        return categoryRepository.findByIsActiveTrueOrderByDisplayOrderAsc().stream()
+                .map(this::mapToDTO)
+                .collect(Collectors.toList());
+    }
+
+    public List<CategoryDTO> getCategoriesWithEvents() {
+        log.info("Getting categories with events");
+        return categoryRepository.findCategoriesWithEvents().stream()
+                .map(this::mapToDTO)
+                .collect(Collectors.toList());
+    }
+
+    public CategoryDTO getCategoryById(Long id) {
+        log.info("Getting category by id: {}", id);
+        Category category = categoryRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Category", "id", id));
+        return mapToDTO(category);
+    }
+
+    public CategoryDTO getCategoryBySlug(String slug) {
+        log.info("Getting category by slug: {}", slug);
+        Category category = categoryRepository.findBySlug(slug)
+                .orElseThrow(() -> new ResourceNotFoundException("Category", "slug", slug));
+        return mapToDTO(category);
+    }
+
+    @Transactional
+    public CategoryDTO createCategory(CategoryRequest request) {
+        log.info("Creating new category: {}", request.getName());
+
+        if (categoryRepository.existsBySlug(request.getSlug())) {
+            throw new ConflictException("Slug danh mục đã tồn tại: " + request.getSlug());
+        }
+
+        if (categoryRepository.existsByName(request.getName())) {
+            throw new ConflictException("Tên danh mục đã tồn tại: " + request.getName());
+        }
+
+        Integer displayOrder = request.getDisplayOrder();
+        if (displayOrder == null) {
+            displayOrder = (int) categoryRepository.count();
+        }
+
+        Category category = Category.builder()
+                .name(request.getName())
+                .slug(request.getSlug())
+                .description(request.getDescription())
+                .iconUrl(request.getIconUrl())
+                .displayOrder(displayOrder)
+                .isActive(request.getIsActive())
+                .build();
+
+        category = categoryRepository.save(category);
+        log.info("Category created successfully with id: {}", category.getId());
+
+        return mapToDTO(category);
+    }
+
+    @Transactional
+    public CategoryDTO updateCategory(Long id, CategoryRequest request) {
+        log.info("Updating category id: {}", id);
+
+        Category category = categoryRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Category", "id", id));
+
+        if (!category.getSlug().equals(request.getSlug())
+                && categoryRepository.existsBySlug(request.getSlug())) {
+            throw new ConflictException("Slug danh mục đã tồn tại: " + request.getSlug());
+        }
+
+        if (!category.getName().equals(request.getName())
+                && categoryRepository.existsByName(request.getName())) {
+            throw new ConflictException("Tên danh mục đã tồn tại: " + request.getName());
+        }
+
+        category.setName(request.getName());
+        category.setSlug(request.getSlug());
+        category.setDescription(request.getDescription());
+        category.setIconUrl(request.getIconUrl());
+        category.setIsActive(request.getIsActive());
+
+        if (request.getDisplayOrder() != null) {
+            category.setDisplayOrder(request.getDisplayOrder());
+        }
+
+        category = categoryRepository.save(category);
+        log.info("Category updated successfully with id: {}", category.getId());
+
+        return mapToDTO(category);
+    }
+
+    @Transactional
+    public void deleteCategory(Long id) {
+        log.info("Deleting category id: {}", id);
+
+        Category category = categoryRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Category", "id", id));
+
+        Long eventCount = categoryRepository.countEventsByCategoryId(id);
+        if (eventCount > 0) {
+            throw new BadRequestException("Không thể xóa danh mục đang có " + eventCount + " sự kiện");
+        }
+
+        categoryRepository.delete(category);
+        log.info("Category deleted successfully with id: {}", id);
+    }
+
+    @Transactional
+    public CategoryDTO toggleActive(Long id) {
+        log.info("Toggling active status for category id: {}", id);
+
+        Category category = categoryRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Category", "id", id));
+
+        category.setIsActive(!category.getIsActive());
+        category = categoryRepository.save(category);
+
+        log.info("Category active status toggled to: {} for id: {}", category.getIsActive(), id);
+        return mapToDTO(category);
+    }
+
+    private CategoryDTO mapToDTO(Category category) {
+        Long eventCount = categoryRepository.countEventsByCategoryId(category.getId());
+
+        return CategoryDTO.builder()
+                .id(category.getId())
+                .name(category.getName())
+                .slug(category.getSlug())
+                .description(category.getDescription())
+                .iconUrl(category.getIconUrl())
+                .displayOrder(category.getDisplayOrder())
+                .isActive(category.getIsActive())
+                .eventCount(eventCount)
+                .createdAt(category.getCreatedAt())
+                .updatedAt(category.getUpdatedAt())
+                .build();
+    }
+}

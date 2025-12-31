@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="${subject}">TicketGo Email</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+            line-height: 1.6;
+        }
+        .email-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+        }
+        .header {
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            padding: 30px;
+            text-align: center;
+        }
+        .logo {
+            max-height: 50px;
+            margin-bottom: 10px;
+        }
+        .header h1 {
+            color: #ffffff;
+            font-size: 24px;
+            font-weight: 600;
+        }
+        .content {
+            padding: 40px 30px;
+        }
+        .greeting {
+            font-size: 18px;
+            color: #1f2937;
+            margin-bottom: 20px;
+        }
+        .message {
+            color: #4b5563;
+            margin-bottom: 25px;
+        }
+        .highlight-box {
+            background-color: #f3f4f6;
+            border-radius: 12px;
+            padding: 25px;
+            margin: 25px 0;
+        }
+        .event-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 12px;
+            padding: 25px;
+            color: #ffffff;
+            margin: 25px 0;
+        }
+        .event-title {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+        .event-detail {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+        .event-detail-icon {
+            width: 20px;
+            margin-right: 10px;
+        }
+        .ticket-info {
+            background-color: #ffffff;
+            border: 2px dashed #e5e7eb;
+            border-radius: 12px;
+            padding: 25px;
+            margin: 25px 0;
+            text-align: center;
+        }
+        .qr-code {
+            max-width: 200px;
+            margin: 20px auto;
+            display: block;
+        }
+        .ticket-code {
+            font-size: 24px;
+            font-weight: bold;
+            color: #6366f1;
+            letter-spacing: 2px;
+            margin: 15px 0;
+        }
+        .order-summary {
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            overflow: hidden;
+            margin: 25px 0;
+        }
+        .order-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 15px 20px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .order-row:last-child {
+            border-bottom: none;
+        }
+        .order-row.total {
+            background-color: #f9fafb;
+            font-weight: 600;
+        }
+        .order-label {
+            color: #6b7280;
+        }
+        .order-value {
+            color: #1f2937;
+            font-weight: 500;
+        }
+        .btn {
+            display: inline-block;
+            padding: 14px 32px;
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            color: #ffffff !important;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 16px;
+            margin: 20px 0;
+        }
+        .btn:hover {
+            opacity: 0.9;
+        }
+        .btn-secondary {
+            background: #ffffff;
+            color: #6366f1 !important;
+            border: 2px solid #6366f1;
+        }
+        .warning-box {
+            background-color: #fef3c7;
+            border-left: 4px solid #f59e0b;
+            padding: 15px 20px;
+            margin: 25px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        .error-box {
+            background-color: #fee2e2;
+            border-left: 4px solid #ef4444;
+            padding: 15px 20px;
+            margin: 25px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        .success-box {
+            background-color: #d1fae5;
+            border-left: 4px solid #10b981;
+            padding: 15px 20px;
+            margin: 25px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        .footer {
+            background-color: #1f2937;
+            color: #9ca3af;
+            padding: 30px;
+            text-align: center;
+            font-size: 14px;
+        }
+        .footer a {
+            color: #a5b4fc;
+            text-decoration: none;
+        }
+        .social-links {
+            margin: 20px 0;
+        }
+        .social-links a {
+            display: inline-block;
+            margin: 0 10px;
+        }
+        .divider {
+            height: 1px;
+            background-color: #e5e7eb;
+            margin: 25px 0;
+        }
+        @media only screen and (max-width: 600px) {
+            .content {
+                padding: 25px 20px;
+            }
+            .event-card, .ticket-info, .highlight-box {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="email-container">
+    <!-- Header -->
+    <div class="header">
+        <img th:src="${logoUrl}" alt="TicketGo" class="logo" onerror="this.style.display='none'">
+        <h1>TicketGo</h1>
+    </div>
+
+    <!-- Content - will be replaced by child templates -->
+    <div class="content" th:fragment="content">
+        <p>Email content goes here</p>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+        <p>Cảm ơn bạn đã sử dụng TicketGo!</p>
+        <div class="divider" style="background-color: #374151;"></div>
+        <p>
+            Cần hỗ trợ? Liên hệ chúng tôi:<br>
+            📧 <a th:href="'mailto:' + ${supportEmail}" th:text="${supportEmail}">support@ticketgo.vn</a><br>
+            📞 <span th:text="${hotline}">1900 1234</span>
+        </p>
+        <p style="margin-top: 20px; font-size: 12px; color: #6b7280;">
+            © <span th:text="${currentYear}">2024</span> TicketGo. All rights reserved.<br>
+            <a th:href="${frontendUrl}">Trang chủ</a> |
+            <a th:href="${frontendUrl} + '/privacy'">Chính sách bảo mật</a> |
+            <a th:href="${frontendUrl} + '/terms'">Điều khoản sử dụng</a>
+        </p>
+    </div>
+</div>
+</body>
+</html>

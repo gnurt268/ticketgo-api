@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xác thực tài khoản - TicketGo</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5; line-height: 1.6; }
+        .email-container { max-width: 600px; margin: 0 auto; background-color: #ffffff; }
+        .header { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); padding: 30px; text-align: center; }
+        .header h1 { color: #ffffff; font-size: 24px; font-weight: 600; }
+        .header .icon { font-size: 48px; margin-bottom: 10px; }
+        .content { padding: 40px 30px; }
+        .greeting { font-size: 18px; color: #1f2937; margin-bottom: 20px; }
+        .message { color: #4b5563; margin-bottom: 25px; }
+        .verify-box { background-color: #f9fafb; border-radius: 16px; padding: 40px; text-align: center; margin: 30px 0; }
+        .btn { display: inline-block; padding: 16px 48px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff !important; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 18px; margin: 20px 0; }
+        .btn:hover { opacity: 0.9; }
+        .link-box { background-color: #f3f4f6; border-radius: 8px; padding: 15px; margin-top: 20px; word-break: break-all; font-size: 12px; color: #6b7280; }
+        .warning-box { background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px 20px; margin: 25px 0; border-radius: 0 8px 8px 0; color: #92400e; font-size: 14px; }
+        .footer { background-color: #1f2937; color: #9ca3af; padding: 30px; text-align: center; font-size: 14px; }
+        .footer a { color: #a5b4fc; text-decoration: none; }
+        .divider { height: 1px; background-color: #e5e7eb; margin: 25px 0; }
+    </style>
+</head>
+<body>
+<div class="email-container">
+    <!-- Header -->
+    <div class="header">
+        <div class="icon">🔐</div>
+        <h1>Xác thực tài khoản</h1>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+        <p class="greeting">Xin chào <strong th:text="${user.fullName}">Bạn</strong>,</p>
+
+        <p class="message">
+            Cảm ơn bạn đã đăng ký tài khoản TicketGo! Vui lòng xác thực địa chỉ email của bạn để hoàn tất quá trình đăng ký.
+        </p>
+
+        <!-- Verify Box -->
+        <div class="verify-box">
+            <p style="color: #6b7280; margin-bottom: 20px;">
+                Click vào nút bên dưới để xác thực email của bạn:
+            </p>
+            <a th:href="${verificationUrl}" class="btn">✅ Xác thực email</a>
+
+            <div class="link-box">
+                <p style="margin-bottom: 10px; color: #374151;">Hoặc copy link sau vào trình duyệt:</p>
+                <span th:text="${verificationUrl}">https://ticketgo.vn/verify?token=xxx</span>
+            </div>
+        </div>
+
+        <div class="warning-box">
+            <strong>⚠️ Lưu ý:</strong><br>
+            • Link xác thực chỉ có hiệu lực trong 24 giờ<br>
+            • Nếu bạn không tạo tài khoản này, vui lòng bỏ qua email<br>
+            • Không chia sẻ link này với bất kỳ ai
+        </div>
+
+        <div class="divider"></div>
+
+        <p class="message" style="text-align: center; font-size: 14px; color: #6b7280;">
+            Sau khi xác thực, bạn có thể đăng nhập và bắt đầu khám phá các sự kiện hấp dẫn trên TicketGo!
+        </p>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+        <p>Cảm ơn bạn đã chọn TicketGo!</p>
+        <div class="divider" style="background-color: #374151;"></div>
+        <p>
+            Cần hỗ trợ? Liên hệ chúng tôi:<br>
+            📧 <a th:href="'mailto:' + ${supportEmail}" th:text="${supportEmail}">support@ticketgo.vn</a><br>
+            📞 <span th:text="${hotline}">1900 1234</span>
+        </p>
+        <p style="margin-top: 20px; font-size: 12px; color: #6b7280;">
+            © <span th:text="${currentYear}">2024</span> TicketGo. All rights reserved.
+        </p>
+    </div>
+</div>
+</body>
+</html>
