@@ -25,9 +25,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -337,6 +335,46 @@ public class OrderService {
             List<Ticket> tickets = ticketRepository.findByOrderId(order.getId());
             return mapToDTO(order, tickets, null);
         });
+    }
+
+    /**
+     *
+     */
+    public Page<OrderDTO> getAllOrdersForAdmin(String keyword, PaymentStatus paymentStatus, Pageable pageable) {
+        Page<Order> orders = orderRepository.findAllForAdmin(keyword, paymentStatus, pageable);
+
+        return orders.map(order -> {
+            List<Ticket> tickets = ticketRepository.findByOrderId(order.getId());
+            return mapToDTO(order, tickets, null);
+        });
+    }
+
+    /**
+     *
+     */
+    public OrderDTO getOrderByIdForAdmin(Long orderId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order", "id", orderId));
+
+        List<Ticket> tickets = ticketRepository.findByOrderId(order.getId());
+        return mapToDTO(order, tickets, null);
+    }
+
+    /**
+     *
+     */
+    public Map<String, Object> getOrderStatistics() {
+        Map<String, Object> stats = new HashMap<>();
+
+        stats.put("totalOrders", orderRepository.count());
+        stats.put("pendingOrders", orderRepository.countByPaymentStatus(PaymentStatus.PENDING));
+        stats.put("completedOrders", orderRepository.countByPaymentStatus(PaymentStatus.COMPLETED));
+        stats.put("failedOrders", orderRepository.countByPaymentStatus(PaymentStatus.FAILED));
+        stats.put("cancelledOrders", orderRepository.countByPaymentStatus(PaymentStatus.CANCELLED));
+        stats.put("totalRevenue", orderRepository.getTotalRevenue());
+        stats.put("averageOrderValue", orderRepository.getAverageOrderValue());
+
+        return stats;
     }
 
     @Transactional

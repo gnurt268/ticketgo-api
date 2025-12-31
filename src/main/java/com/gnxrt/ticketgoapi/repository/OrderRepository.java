@@ -152,4 +152,15 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             "FROM Order o WHERE o.paymentStatus = 'COMPLETED' " +
             "GROUP BY o.event.category.name")
     List<Object[]> getRevenueByCategory();
+
+    @Query("SELECT o FROM Order o WHERE " +
+            "(:keyword IS NULL OR LOWER(o.orderCode) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
+            "OR LOWER(o.buyerName) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
+            "OR LOWER(o.buyerEmail) LIKE LOWER(CONCAT('%', :keyword, '%'))) " +
+            "AND (:paymentStatus IS NULL OR o.paymentStatus = :paymentStatus)")
+    Page<Order> findAllForAdmin(
+            @Param("keyword") String keyword,
+            @Param("paymentStatus") PaymentStatus paymentStatus,
+            Pageable pageable
+    );
 }
