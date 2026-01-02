@@ -22,11 +22,8 @@ public class SeatController {
 
     private final SeatService seatService;
 
-    // ==================== PUBLIC ENDPOINTS ====================
-
     /**
      * GET /api/zones/{zoneId}/seats
-     * Lấy seat map của zone (public)
      */
     @GetMapping("/zones/{zoneId}/seats")
     public ResponseEntity<SeatMapDTO> getSeatMap(@PathVariable Long zoneId) {
@@ -34,11 +31,8 @@ public class SeatController {
         return ResponseEntity.ok(seatMap);
     }
 
-    // ==================== USER ENDPOINTS (Authenticated) ====================
-
     /**
      * GET /api/zones/{zoneId}/seats/map
-     * Lấy seat map với thông tin reservation của user
      */
     @GetMapping("/zones/{zoneId}/seats/map")
     @PreAuthorize("isAuthenticated()")
@@ -50,7 +44,6 @@ public class SeatController {
 
     /**
      * POST /api/zones/{zoneId}/seats/reserve
-     * Reserve seats (giữ chỗ)
      */
     @PostMapping("/zones/{zoneId}/seats/reserve")
     @PreAuthorize("isAuthenticated()")
@@ -64,7 +57,6 @@ public class SeatController {
 
     /**
      * POST /api/zones/{zoneId}/seats/release
-     * Release seats (hủy giữ chỗ)
      */
     @PostMapping("/zones/{zoneId}/seats/release")
     @PreAuthorize("isAuthenticated()")
@@ -78,7 +70,6 @@ public class SeatController {
 
     /**
      * POST /api/zones/{zoneId}/seats/release-all
-     * Release all reservations của user trong zone
      */
     @PostMapping("/zones/{zoneId}/seats/release-all")
     @PreAuthorize("isAuthenticated()")
@@ -89,7 +80,6 @@ public class SeatController {
 
     /**
      * GET /api/zones/{zoneId}/seats/my-reservations
-     * Lấy seats đang reserved của user
      */
     @GetMapping("/zones/{zoneId}/seats/my-reservations")
     @PreAuthorize("isAuthenticated()")
@@ -98,11 +88,8 @@ public class SeatController {
         return ResponseEntity.ok(seats);
     }
 
-    // ==================== ORGANIZER ENDPOINTS ====================
-
     /**
      * POST /api/organizer/zones/{zoneId}/seats/generate
-     * Generate seats cho zone (INDOOR events)
      */
     @PostMapping("/organizer/zones/{zoneId}/seats/generate")
     @PreAuthorize("hasAnyRole('ORGANIZER', 'ADMIN')")
@@ -116,7 +103,6 @@ public class SeatController {
 
     /**
      * DELETE /api/organizer/zones/{zoneId}/seats
-     * Xóa tất cả seats của zone
      */
     @DeleteMapping("/organizer/zones/{zoneId}/seats")
     @PreAuthorize("hasAnyRole('ORGANIZER', 'ADMIN')")

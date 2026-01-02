@@ -13,6 +13,28 @@ spring:
     password: ${DB_PASSWORD:371902}
     driver-class-name: com.mysql.jdbc.Driver
 
+  # Redis
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 5000ms
+
+  # Kafka
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      group-id: ${KAFKA_CONSUMER_GROUP:ticketgo-email-group}
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: com.gnxrt.ticketgoapi.kafka.event
+
   # Email
   mail:
     host: ${MAIL_HOST:}
@@ -92,3 +114,5 @@ logging:
   level:
     com.gnxrt.ticketgoapi: DEBUG
     org.springframework.mail: DEBUG
+    org.springframework.kafka: INFO
+    org.apache.kafka: WARN

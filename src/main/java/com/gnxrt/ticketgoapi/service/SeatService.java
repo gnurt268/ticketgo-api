@@ -28,6 +28,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -38,8 +39,11 @@ public class SeatService {
     private final SeatRepository seatRepository;
     private final TicketZoneRepository ticketZoneRepository;
     private final UserRepository userRepository;
+    private final DistributedLockService distributedLockService;
 
     private static final int DEFAULT_RESERVATION_MINUTES = 15;
+    private static final long LOCK_WAIT_TIME = 5; // seconds
+    private static final long LOCK_LEASE_TIME = 30; // seconds
 
     public SeatMapDTO getSeatMap(Long zoneId) {
         return getSeatMap(zoneId, null);
@@ -176,10 +180,31 @@ public class SeatService {
         return getSeatMap(zoneId);
     }
 
+    /**
+     *
+     */
     @Transactional
     public SeatReservationDTO reserveSeats(Long zoneId, ReserveSeatsRequest request) {
-        log.info("Reserving {} seats for zone: {}", request.getSeatIds().size(), zoneId);
+        log.info("Reserving {} seats for zone: {} with distributed lock", request.getSeatIds().size(), zoneId);
 
+        List<Long> seatIds = request.getSeatIds();
+
+        boolean locked = distributedLockService.tryLockSeats(seatIds, LOCK_WAIT_TIME, LOCK_LEASE_TIME, TimeUnit.SECONDS);
+        if (!locked) {
+            throw new ConflictException("Ghế đang được người khác đặt. Vui lòng thử lại sau vài giây.");
+        }
+
+        try {
+            return doReserveSeats(zoneId, request);
+        } finally {
+            distributedLockService.unlockSeats(seatIds);
+        }
+    }
+
+    /**
+     *
+     */
+    private SeatReservationDTO doReserveSeats(Long zoneId, ReserveSeatsRequest request) {
         User currentUser = getCurrentUser();
         TicketZone zone = ticketZoneRepository.findById(zoneId)
                 .orElseThrow(() -> new ResourceNotFoundException("TicketZone", "id", zoneId));
@@ -232,7 +257,7 @@ public class SeatService {
                 .map(Seat::getPrice)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        log.info("Reserved {} seats for user: {}", seats.size(), currentUser.getEmail());
+        log.info("Reserved {} seats for user: {} (with distributed lock)", seats.size(), currentUser.getEmail());
 
         return SeatReservationDTO.builder()
                 .reservationId(UUID.randomUUID().toString())

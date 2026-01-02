@@ -19,11 +19,8 @@ public class TicketZoneController {
 
     private final TicketZoneService ticketZoneService;
 
-    // ==================== PUBLIC ENDPOINTS ====================
-
     /**
      * GET /api/events/{eventId}/zones
-     * Lấy ticket zones của event (public - chỉ active zones)
      */
     @GetMapping("/events/{eventId}/zones")
     public ResponseEntity<List<TicketZoneDTO>> getEventZones(@PathVariable Long eventId) {
@@ -33,7 +30,6 @@ public class TicketZoneController {
 
     /**
      * GET /api/zones/{id}
-     * Lấy chi tiết ticket zone
      */
     @GetMapping("/zones/{id}")
     public ResponseEntity<TicketZoneDTO> getZoneById(@PathVariable Long id) {
@@ -41,11 +37,8 @@ public class TicketZoneController {
         return ResponseEntity.ok(zone);
     }
 
-    // ==================== ORGANIZER ENDPOINTS ====================
-
     /**
      * GET /api/organizer/events/{eventId}/zones
-     * Lấy tất cả ticket zones của event (bao gồm inactive)
      */
     @GetMapping("/organizer/events/{eventId}/zones")
     @PreAuthorize("hasAnyRole('ORGANIZER', 'ADMIN')")
@@ -56,7 +49,6 @@ public class TicketZoneController {
 
     /**
      * POST /api/organizer/events/{eventId}/zones
-     * Tạo ticket zone mới
      */
     @PostMapping("/organizer/events/{eventId}/zones")
     @PreAuthorize("hasAnyRole('ORGANIZER', 'ADMIN')")
@@ -70,7 +62,6 @@ public class TicketZoneController {
 
     /**
      * PUT /api/organizer/zones/{id}
-     * Cập nhật ticket zone
      */
     @PutMapping("/organizer/zones/{id}")
     @PreAuthorize("hasAnyRole('ORGANIZER', 'ADMIN')")
@@ -84,7 +75,6 @@ public class TicketZoneController {
 
     /**
      * DELETE /api/organizer/zones/{id}
-     * Xóa ticket zone
      */
     @DeleteMapping("/organizer/zones/{id}")
     @PreAuthorize("hasAnyRole('ORGANIZER', 'ADMIN')")
@@ -95,7 +85,6 @@ public class TicketZoneController {
 
     /**
      * PATCH /api/organizer/zones/{id}/toggle-active
-     * Toggle active status
      */
     @PatchMapping("/organizer/zones/{id}/toggle-active")
     @PreAuthorize("hasAnyRole('ORGANIZER', 'ADMIN')")
@@ -106,7 +95,6 @@ public class TicketZoneController {
 
     /**
      * PUT /api/organizer/events/{eventId}/zones/reorder
-     * Cập nhật thứ tự hiển thị zones
      */
     @PutMapping("/organizer/events/{eventId}/zones/reorder")
     @PreAuthorize("hasAnyRole('ORGANIZER', 'ADMIN')")

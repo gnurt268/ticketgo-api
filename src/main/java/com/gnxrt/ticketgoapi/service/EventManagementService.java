@@ -6,15 +6,19 @@ import com.gnxrt.ticketgoapi.dto.response.event.EventDetailDTO;
 import com.gnxrt.ticketgoapi.dto.response.event.EventListDTO;
 import com.gnxrt.ticketgoapi.enums.EventStatus;
 import com.gnxrt.ticketgoapi.enums.EventType;
+import com.gnxrt.ticketgoapi.enums.TicketStatus;
 import com.gnxrt.ticketgoapi.exception.BadRequestException;
 import com.gnxrt.ticketgoapi.exception.ConflictException;
 import com.gnxrt.ticketgoapi.exception.ForbiddenException;
 import com.gnxrt.ticketgoapi.exception.ResourceNotFoundException;
+import com.gnxrt.ticketgoapi.kafka.producer.EmailEventProducer;
 import com.gnxrt.ticketgoapi.model.Category;
 import com.gnxrt.ticketgoapi.model.Event;
+import com.gnxrt.ticketgoapi.model.Ticket;
 import com.gnxrt.ticketgoapi.model.User;
 import com.gnxrt.ticketgoapi.repository.CategoryRepository;
 import com.gnxrt.ticketgoapi.repository.EventRepository;
+import com.gnxrt.ticketgoapi.repository.TicketRepository;
 import com.gnxrt.ticketgoapi.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,6 +30,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -35,6 +40,8 @@ public class EventManagementService {
     private final EventRepository eventRepository;
     private final CategoryRepository categoryRepository;
     private final UserRepository userRepository;
+    private final TicketRepository ticketRepository;
+    private final EmailEventProducer emailEventProducer;
 
     public Page<EventListDTO> getAllEvents(
             EventStatus status,
@@ -219,10 +226,17 @@ public class EventManagementService {
         if ("APPROVE".equals(action)) {
             event.setStatus(EventStatus.APPROVED);
             log.info("Event approved with id: {}", event.getId());
+
+            // Send approval email via Kafka
+            emailEventProducer.sendEventApprovedEvent(event);
+
         } else if ("REJECT".equals(action)) {
             event.setStatus(EventStatus.DRAFT);
             log.info("Event rejected with id: {}. Reason: {}", event.getId(), request.getReason());
-            // TODO: Send email notification to organizer with rejection reason
+
+            // Send rejection email via Kafka
+            emailEventProducer.sendEventRejectedEvent(event, request.getReason());
+
         } else {
             throw new BadRequestException("Hành động không hợp lệ. Phải là APPROVE hoặc REJECT");
         }
@@ -289,7 +303,12 @@ public class EventManagementService {
         event.setStatus(EventStatus.CANCELLED);
         event = eventRepository.save(event);
 
-        // TODO: Send email notifications to ticket holders
+        // Send cancellation emails to all ticket holders via Kafka
+        List<Ticket> activeTickets = ticketRepository.findByEventIdAndStatus(eventId, TicketStatus.ACTIVE);
+        for (Ticket ticket : activeTickets) {
+            emailEventProducer.sendEventCancelledEvent(ticket, reason);
+        }
+
         // TODO: Process refunds
 
         log.info("Event cancelled successfully with id: {}", event.getId());

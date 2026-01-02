@@ -80,6 +80,11 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
     Long countByEventIdAndStatus(Long eventId, TicketStatus status);
 
     /**
+     * Find all tickets for an event with specific status
+     */
+    List<Ticket> findByEventIdAndStatus(Long eventId, TicketStatus status);
+
+    /**
      *
      */
     Long countByEventIdAndIsCheckedInTrue(Long eventId);

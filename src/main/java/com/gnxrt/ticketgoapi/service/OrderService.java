@@ -5,9 +5,11 @@ import com.gnxrt.ticketgoapi.dto.response.order.OrderDTO;
 import com.gnxrt.ticketgoapi.dto.response.payment.VNPayCallbackDTO;
 import com.gnxrt.ticketgoapi.enums.*;
 import com.gnxrt.ticketgoapi.exception.BadRequestException;
+import com.gnxrt.ticketgoapi.exception.ConflictException;
 import com.gnxrt.ticketgoapi.exception.ForbiddenException;
 import com.gnxrt.ticketgoapi.exception.PaymentException;
 import com.gnxrt.ticketgoapi.exception.ResourceNotFoundException;
+import com.gnxrt.ticketgoapi.kafka.producer.EmailEventProducer;
 import com.gnxrt.ticketgoapi.model.*;
 import com.gnxrt.ticketgoapi.repository.*;
 import jakarta.servlet.http.HttpServletRequest;
@@ -26,6 +28,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -40,14 +43,54 @@ public class OrderService {
     private final SeatRepository seatRepository;
     private final UserRepository userRepository;
     private final VNPayService vnPayService;
-    private final EmailService emailService;
+    private final EmailEventProducer emailEventProducer;
+    private final DistributedLockService distributedLockService;
 
     private static final int PAYMENT_TIMEOUT_MINUTES = 15;
+    private static final long LOCK_WAIT_TIME = 10; // seconds
+    private static final long LOCK_LEASE_TIME = 60; // seconds
 
+    /**
+     *
+     */
     @Transactional
     public OrderDTO createOrder(CreateOrderRequest request, HttpServletRequest httpRequest) {
         log.info("Creating order for event: {}, zone: {}", request.getEventId(), request.getTicketZoneId());
 
+        // Check if this is a seat-based booking
+        boolean hasSeatSelection = request.getSeatIds() != null && !request.getSeatIds().isEmpty();
+
+        if (hasSeatSelection) {
+            List<Long> seatIds = request.getSeatIds();
+            boolean locked = distributedLockService.tryLockSeats(seatIds, LOCK_WAIT_TIME, LOCK_LEASE_TIME, TimeUnit.SECONDS);
+            if (!locked) {
+                throw new ConflictException("Ghế đang được người khác đặt. Vui lòng thử lại sau vài giây.");
+            }
+
+            try {
+                return doCreateOrder(request, httpRequest);
+            } finally {
+                distributedLockService.unlockSeats(seatIds);
+            }
+        } else {
+            Long zoneId = request.getTicketZoneId();
+            boolean locked = distributedLockService.tryLockZone(zoneId, LOCK_WAIT_TIME, LOCK_LEASE_TIME, TimeUnit.SECONDS);
+            if (!locked) {
+                throw new ConflictException("Khu vực đang bận. Vui lòng thử lại sau vài giây.");
+            }
+
+            try {
+                return doCreateOrder(request, httpRequest);
+            } finally {
+                distributedLockService.unlockZone(zoneId);
+            }
+        }
+    }
+
+    /**
+     *
+     */
+    private OrderDTO doCreateOrder(CreateOrderRequest request, HttpServletRequest httpRequest) {
         User currentUser = getCurrentUser();
 
         Event event = eventRepository.findById(request.getEventId())
@@ -92,7 +135,7 @@ public class OrderService {
                         seat.getReservedBy() != null &&
                         seat.getReservedBy().getId().equals(currentUser.getId())) {
                 } else {
-                    throw new BadRequestException("Ghế " + seat.getSeatCode() + " không khả dụng");
+                    throw new ConflictException("Ghế " + seat.getSeatCode() + " không khả dụng hoặc đã được đặt bởi người khác");
                 }
             }
 
@@ -101,7 +144,7 @@ public class OrderService {
             quantity = request.getQuantity() != null ? request.getQuantity() : 1;
 
             if (zone.getAvailableCapacity() < quantity) {
-                throw new BadRequestException("Không đủ vé. Còn lại: " + zone.getAvailableCapacity());
+                throw new ConflictException("Không đủ vé. Còn lại: " + zone.getAvailableCapacity());
             }
         }
 
@@ -264,7 +307,7 @@ public class OrderService {
 
             orderRepository.save(order);
 
-            emailService.sendOrderConfirmationEmail(order, tickets);
+            emailEventProducer.sendPaymentSuccessEvent(order, tickets);
 
             return mapToDTO(order, tickets, null);
 
@@ -295,7 +338,7 @@ public class OrderService {
 
             orderRepository.save(order);
 
-            emailService.sendPaymentFailedEmail(order, callback.getResponseMessage());
+            emailEventProducer.sendPaymentFailedEvent(order, callback.getResponseMessage());
 
             throw new PaymentException(callback.getResponseMessage());
         }

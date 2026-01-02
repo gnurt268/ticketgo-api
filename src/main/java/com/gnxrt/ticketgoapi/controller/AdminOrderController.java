@@ -14,9 +14,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
-/**
- * Controller cho Admin quản lý Orders
- */
 @RestController
 @RequestMapping("/api/admin/orders")
 @PreAuthorize("hasRole('ADMIN')")
@@ -27,7 +24,6 @@ public class AdminOrderController {
 
     /**
      * GET /api/admin/orders
-     * Lấy danh sách tất cả orders (có phân trang và filter)
      */
     @GetMapping
     public ResponseEntity<Page<OrderDTO>> getAllOrders(
@@ -49,7 +45,6 @@ public class AdminOrderController {
 
     /**
      * GET /api/admin/orders/{id}
-     * Xem chi tiết order
      */
     @GetMapping("/{id}")
     public ResponseEntity<OrderDTO> getOrderDetail(@PathVariable Long id) {
@@ -59,7 +54,6 @@ public class AdminOrderController {
 
     /**
      * GET /api/admin/orders/statistics
-     * Thống kê orders
      */
     @GetMapping("/statistics")
     public ResponseEntity<Map<String, Object>> getOrderStatistics() {

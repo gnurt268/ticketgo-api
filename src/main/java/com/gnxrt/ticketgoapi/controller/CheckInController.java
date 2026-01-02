@@ -21,7 +21,6 @@ public class CheckInController {
 
     /**
      * POST /api/checkin/validate
-     * Validate QR code without check-in (preview ticket info)
      */
     @PostMapping("/validate")
     @PreAuthorize("hasAnyRole('STAFF', 'ORGANIZER', 'ADMIN')")
@@ -33,7 +32,6 @@ public class CheckInController {
 
     /**
      * POST /api/checkin/scan
-     * Check-in ticket by QR code
      */
     @PostMapping("/scan")
     @PreAuthorize("hasAnyRole('STAFF', 'ORGANIZER', 'ADMIN')")
@@ -50,7 +48,6 @@ public class CheckInController {
 
     /**
      * GET /api/checkin/stats/{eventId}
-     * Get check-in statistics for an event
      */
     @GetMapping("/stats/{eventId}")
     @PreAuthorize("hasAnyRole('STAFF', 'ORGANIZER', 'ADMIN')")
