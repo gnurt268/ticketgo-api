@@ -37,9 +37,6 @@ public class EmailService {
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
 
-    /**
-     *
-     */
     @Async
     public void sendOrderConfirmationEmail(Order order, List<Ticket> tickets) {
         log.info("Sending order confirmation email to: {}", order.getBuyerEmail());
@@ -83,9 +80,6 @@ public class EmailService {
         }
     }
 
-    /**
-     *
-     */
     @Async
     public void sendPaymentFailedEmail(Order order, String reason) {
         log.info("Sending payment failed email to: {}", order.getBuyerEmail());
@@ -111,9 +105,6 @@ public class EmailService {
         }
     }
 
-    /**
-     *
-     */
     @Async
     public void sendOrderCancelledEmail(Order order, String reason) {
         log.info("Sending order cancelled email to: {}", order.getBuyerEmail());
@@ -141,9 +132,6 @@ public class EmailService {
 
     // ==================== TICKET EMAILS ====================
 
-    /**
-     *
-     */
     @Async
     public void sendTicketEmail(Ticket ticket) {
         log.info("Sending ticket email to: {}", ticket.getHolderEmail());
@@ -174,9 +162,6 @@ public class EmailService {
         }
     }
 
-    /**
-     * Gửi email chuyển nhượng vé
-     */
     @Async
     public void sendTicketTransferEmail(Ticket ticket, String fromEmail) {
         log.info("Sending ticket transfer email to: {}", ticket.getHolderEmail());
@@ -208,9 +193,6 @@ public class EmailService {
         }
     }
 
-    /**
-     * Gửi email thông báo chuyển nhượng vé
-     */
     @Async
     public void sendTicketTransferNotificationEmail(String fromEmail, Ticket ticket) {
         log.info("Sending ticket transfer notification to: {}", fromEmail);
@@ -238,9 +220,6 @@ public class EmailService {
 
     // ==================== EVENT EMAILS ====================
 
-    /**
-     * Gửi email nhắc nhở sự kiện sắp diễn ra
-     */
     @Async
     public void sendEventReminderEmail(Ticket ticket) {
         log.info("Sending event reminder email to: {}", ticket.getHolderEmail());
@@ -271,9 +250,6 @@ public class EmailService {
         }
     }
 
-    /**
-     * Gửi email thông báo sự kiện bị hủy
-     */
     @Async
     public void sendEventCancelledEmail(Ticket ticket, String reason) {
         log.info("Sending event cancelled email to: {}", ticket.getHolderEmail());
@@ -298,9 +274,6 @@ public class EmailService {
         }
     }
 
-    /**
-     * Gửi email thông báo event được duyệt (cho organizer)
-     */
     @Async
     public void sendEventApprovedEmail(Event event) {
         log.info("Sending event approved email to: {}", event.getOrganizer().getEmail());
@@ -325,9 +298,6 @@ public class EmailService {
         }
     }
 
-    /**
-     * Gửi email thông báo event bị từ chối (cho organizer)
-     */
     @Async
     public void sendEventRejectedEmail(Event event, String reason) {
         log.info("Sending event rejected email to: {}", event.getOrganizer().getEmail());
@@ -355,9 +325,6 @@ public class EmailService {
 
     // ==================== AUTH EMAILS ====================
 
-    /**
-     * Gửi email xác thực tài khoản
-     */
     @Async
     public void sendVerificationEmail(User user, String verificationToken) {
         log.info("Sending verification email to: {}", user.getEmail());
@@ -381,9 +348,6 @@ public class EmailService {
         }
     }
 
-    /**
-     * Gửi email reset mật khẩu
-     */
     @Async
     public void sendPasswordResetEmail(User user, String resetToken) {
         log.info("Sending password reset email to: {}", user.getEmail());
@@ -407,9 +371,6 @@ public class EmailService {
         }
     }
 
-    /**
-     * Gửi email chào mừng sau khi đăng ký
-     */
     @Async
     public void sendWelcomeEmail(User user) {
         log.info("Sending welcome email to: {}", user.getEmail());
@@ -435,9 +396,6 @@ public class EmailService {
 
     // ==================== HELPER METHODS ====================
 
-    /**
-     * Gửi email HTML
-     */
     private void sendHtmlEmail(String to, String subject, String htmlContent) throws MessagingException {
         MimeMessage message = mailSender.createMimeMessage();
         MimeMessageHelper helper = new MimeMessageHelper(message, true, StandardCharsets.UTF_8.name());
@@ -450,9 +408,6 @@ public class EmailService {
         mailSender.send(message);
     }
 
-    /**
-     * Gửi email HTML với inline images (QR codes)
-     */
     private void sendHtmlEmailWithInlineImages(String to, String subject, String htmlContent,
                                                Map<String, byte[]> inlineImages) throws MessagingException {
         MimeMessage message = mailSender.createMimeMessage();
@@ -473,9 +428,6 @@ public class EmailService {
         mailSender.send(message);
     }
 
-    /**
-     * Tạo context cơ bản với các biến chung
-     */
     private Context createBaseContext() {
         Context context = new Context();
         context.setVariable("logoUrl", emailConfig.getLogoUrl());
@@ -486,9 +438,6 @@ public class EmailService {
         return context;
     }
 
-    /**
-     * Format số tiền VND
-     */
     private String formatCurrency(BigDecimal amount) {
         if (amount == null) return "0 ₫";
         java.text.NumberFormat formatter = java.text.NumberFormat.getInstance(new java.util.Locale("vi", "VN"));

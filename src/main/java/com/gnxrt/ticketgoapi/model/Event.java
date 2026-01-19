@@ -12,9 +12,6 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Event Entity
- */
 @Entity
 @Table(name = "events", indexes = {
         @Index(name = "idx_organizer", columnList = "organizer_id"),
@@ -155,7 +152,6 @@ public class Event {
     @Builder.Default
     private List<UserEventInteraction> interactions = new ArrayList<>();
 
-    // Helper methods
     public boolean isPublished() {
         return this.status == EventStatus.PUBLISHED;
     }

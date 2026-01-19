@@ -23,7 +23,6 @@ public class PaymentSuccessEvent extends BaseEmailEvent {
     private BigDecimal totalAmount;
     private LocalDateTime paidAt;
 
-    // Event info
     private Long relatedEventId;
     private String eventTitle;
     private String eventVenue;
@@ -31,7 +30,6 @@ public class PaymentSuccessEvent extends BaseEmailEvent {
     private LocalDateTime eventStartDate;
     private String eventPosterUrl;
 
-    // Tickets to send
     private List<TicketEmailInfo> tickets;
 
     @Data

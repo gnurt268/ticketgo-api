@@ -10,9 +10,6 @@ import org.hibernate.annotations.UpdateTimestamp;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-/**
- * Seat Entity
- */
 @Entity
 @Table(name = "seats",
         uniqueConstraints = {
@@ -86,7 +83,6 @@ public class Seat {
     @OneToOne(mappedBy = "seat")
     private Ticket ticket;
 
-    // Helper methods
     public boolean isAvailable() {
         return this.status == SeatStatus.AVAILABLE;
     }

@@ -36,9 +36,6 @@ public class OrganizerRequestService {
 
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
 
-    /**
-     *
-     */
     @Transactional
     public OrganizerRequestDTO submitRequest(Long userId, OrganizerRegistrationRequest request) {
         User user = userRepository.findById(userId)
@@ -76,18 +73,12 @@ public class OrganizerRequestService {
         return mapToDTO(organizerRequest);
     }
 
-    /**
-     *
-     */
     public OrganizerRequestDTO getMyRequest(Long userId) {
         OrganizerRequest request = organizerRequestRepository.findByUserId(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Bạn chưa có yêu cầu đăng ký Organizer"));
         return mapToDTO(request);
     }
 
-    /**
-     *
-     */
     @Transactional
     public void cancelMyRequest(Long userId) {
         OrganizerRequest request = organizerRequestRepository
@@ -99,9 +90,6 @@ public class OrganizerRequestService {
         log.info("User {} cancelled organizer request {}", userId, request.getId());
     }
 
-    /**
-     *
-     */
     public Page<OrganizerRequestDTO> getAllRequests(
             OrganizerRequestStatus status,
             String keyword,
@@ -111,26 +99,17 @@ public class OrganizerRequestService {
         return requests.map(this::mapToDTO);
     }
 
-    /**
-     *
-     */
     public Page<OrganizerRequestDTO> getPendingRequests(Pageable pageable) {
         Page<OrganizerRequest> requests = organizerRequestRepository.findByStatus(OrganizerRequestStatus.PENDING, pageable);
         return requests.map(this::mapToDTO);
     }
 
-    /**
-     *
-     */
     public OrganizerRequestDTO getRequestById(Long requestId) {
         OrganizerRequest request = organizerRequestRepository.findById(requestId)
                 .orElseThrow(() -> new ResourceNotFoundException("Yêu cầu không tồn tại"));
         return mapToDTO(request);
     }
 
-    /**
-     *
-     */
     @Transactional
     public OrganizerRequestDTO reviewRequest(Long requestId, Long adminId, OrganizerRequestReviewRequest reviewRequest) {
         OrganizerRequest request = organizerRequestRepository.findById(requestId)
@@ -175,9 +154,6 @@ public class OrganizerRequestService {
         return mapToDTO(organizerRequestRepository.save(request));
     }
 
-    /**
-     *
-     */
     public Map<String, Object> getStatistics() {
         Map<String, Object> stats = new HashMap<>();
 
@@ -189,9 +165,6 @@ public class OrganizerRequestService {
         return stats;
     }
 
-    /**
-     *
-     */
     private OrganizerRequestDTO mapToDTO(OrganizerRequest request) {
         User user = request.getUser();
 

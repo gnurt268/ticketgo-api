@@ -17,56 +17,26 @@ import java.util.Optional;
 @Repository
 public interface EventRepository extends JpaRepository<Event, Long> {
 
-    /**
-     *
-     */
     Optional<Event> findBySlug(String slug);
 
-    /**
-     *
-     */
     boolean existsBySlug(String slug);
 
-    /**
-     *
-     */
     Page<Event> findByStatus(EventStatus status, Pageable pageable);
 
-    /**
-     *
-     */
     Page<Event> findByOrganizerId(Long organizerId, Pageable pageable);
 
-    /**
-     *
-     */
     Page<Event> findByOrganizerIdAndStatus(Long organizerId, EventStatus status, Pageable pageable);
 
-    /**
-     *
-     */
     Page<Event> findByCategoryId(Long categoryId, Pageable pageable);
 
-    /**
-     *
-     */
     Page<Event> findByStatusAndOrganizerId(EventStatus status, Long organizerId, Pageable pageable);
 
-    /**
-     *
-     */
     @Query("SELECT e FROM Event e WHERE e.status = 'PUBLISHED' AND e.startDate > :now ORDER BY e.startDate ASC")
     Page<Event> findUpcomingPublishedEvents(@Param("now") LocalDateTime now, Pageable pageable);
 
-    /**
-     *
-     */
     @Query("SELECT e FROM Event e WHERE e.category.id = :categoryId AND e.status = 'PUBLISHED' AND e.startDate > :now ORDER BY e.startDate ASC")
     Page<Event> findUpcomingPublishedEventsByCategory(@Param("categoryId") Long categoryId, @Param("now") LocalDateTime now, Pageable pageable);
 
-    /**
-     *
-     */
     @Query("SELECT e FROM Event e WHERE e.status = 'PUBLISHED' AND e.startDate > :now AND " +
             "(LOWER(e.title) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
             "LOWER(e.description) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
@@ -74,33 +44,18 @@ public interface EventRepository extends JpaRepository<Event, Long> {
             "LOWER(e.venue) LIKE LOWER(CONCAT('%', :keyword, '%')))")
     Page<Event> searchPublishedEvents(@Param("keyword") String keyword, @Param("now") LocalDateTime now, Pageable pageable);
 
-    /**
-     *
-     */
     @Query("SELECT e FROM Event e WHERE e.status = 'PUBLISHED' AND e.isFeatured = true AND e.startDate > :now ORDER BY e.startDate ASC")
     Page<Event> findFeaturedEvents(@Param("now") LocalDateTime now, Pageable pageable);
 
-    /**
-     *
-     */
     @Query("SELECT e FROM Event e WHERE e.status = 'PUBLISHED' AND e.city = :city AND e.startDate > :now ORDER BY e.startDate ASC")
     Page<Event> findEventsByCity(@Param("city") String city, @Param("now") LocalDateTime now, Pageable pageable);
 
-    /**
-     *
-     */
     @Query("SELECT e FROM Event e WHERE e.status = 'PUBLISHED' ORDER BY e.totalTicketsSold DESC")
     Page<Event> findTopSellingEvents(Pageable pageable);
 
-    /**
-     *
-     */
     @Query("SELECT e FROM Event e WHERE e.status = 'PUBLISHED' ORDER BY e.viewCount DESC")
     Page<Event> findMostViewedEvents(Pageable pageable);
 
-    /**
-     *
-     */
     @Query("SELECT e FROM Event e WHERE " +
             "(:status IS NULL OR e.status = :status) AND " +
             "(:categoryId IS NULL OR e.category.id = :categoryId) AND " +
@@ -120,42 +75,21 @@ public interface EventRepository extends JpaRepository<Event, Long> {
 
     // ==================== ADMIN STATISTICS METHODS ====================
 
-    /**
-     *
-     */
     Long countByStatus(EventStatus status);
 
-    /**
-     *
-     */
     @Query("SELECT e FROM Event e WHERE e.status = 'PENDING' ORDER BY e.createdAt ASC")
     Page<Event> findPendingEvents(Pageable pageable);
 
-    /**
-     *
-     */
     @Query("SELECT e FROM Event e WHERE e.createdAt BETWEEN :start AND :end ORDER BY e.createdAt DESC")
     List<Event> findEventsBetween(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
 
-    /**
-     *
-     */
     @Query("SELECT COUNT(e) FROM Event e WHERE e.createdAt BETWEEN :start AND :end")
     Long countEventsBetween(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
 
-    /**
-     *
-     */
     List<Event> findByOrganizerIdAndStatusIn(Long organizerId, List<EventStatus> statuses);
 
-    /**
-     *
-     */
     boolean existsByIdAndOrganizerId(Long eventId, Long organizerId);
 
-    /**
-     *
-     */
     @Query("SELECT e FROM Event e WHERE " +
             "LOWER(e.title) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
             "LOWER(e.description) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
@@ -163,21 +97,12 @@ public interface EventRepository extends JpaRepository<Event, Long> {
             "LOWER(e.venue) LIKE LOWER(CONCAT('%', :keyword, '%'))")
     Page<Event> searchAllEvents(@Param("keyword") String keyword, Pageable pageable);
 
-    /**
-     *
-     */
     @Query("SELECT COUNT(e) FROM Event e WHERE e.status = 'PENDING'")
     Long countPendingEvents();
 
-    /**
-     *
-     */
     @Query("SELECT e FROM Event e WHERE e.organizer.id = :organizerId ORDER BY e.createdAt DESC")
     Page<Event> findByOrganizerIdOrderByCreatedAtDesc(@Param("organizerId") Long organizerId, Pageable pageable);
 
-    /**
-     *
-     */
     @Query("SELECT e FROM Event e WHERE e.organizer.id = :organizerId AND e.status = :status ORDER BY e.createdAt DESC")
     Page<Event> findByOrganizerIdAndStatusOrderByCreatedAtDesc(
             @Param("organizerId") Long organizerId,

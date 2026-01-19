@@ -24,7 +24,6 @@ public class EventReminderEvent extends BaseEmailEvent {
     private String seatCode;
     private String rowNumber;
 
-    // Event info
     private Long relatedEventId;
     private String eventTitle;
     private String eventVenue;
@@ -32,7 +31,6 @@ public class EventReminderEvent extends BaseEmailEvent {
     private LocalDateTime eventStartDate;
     private String eventPosterUrl;
 
-    // Reminder specific
     private int hoursBeforeEvent;
 
     public static EventReminderEvent create() {

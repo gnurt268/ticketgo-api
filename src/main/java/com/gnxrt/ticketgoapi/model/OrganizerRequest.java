@@ -8,9 +8,6 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
 
-/**
- * OrganizerRequest Entity
- */
 @Entity
 @Table(name = "organizer_requests", indexes = {
         @Index(name = "idx_user_id", columnList = "user_id"),

@@ -200,7 +200,6 @@ public class WaitingRoomScheduler {
         LocalDateTime now = LocalDateTime.now();
         Long eventId = room.getEvent().getId();
 
-        // 1. Expire SHOPPING sessions (quá thời gian mua)
         List<QueueEntry> expiredShopping = queueEntryRepository
                 .findExpiredShoppingSessions(room.getId(), now);
 
@@ -243,7 +242,6 @@ public class WaitingRoomScheduler {
                 room.setStatus(WaitingRoomStatus.ENDED);
                 waitingRoomRepository.save(room);
 
-                // Clean up Redis data
                 redisService.clearWaitingRoomData(room.getEvent().getId());
 
                 log.info("Waiting room {} ended for event {}",

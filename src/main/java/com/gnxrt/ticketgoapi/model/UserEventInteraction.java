@@ -8,9 +8,6 @@ import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
 
-/**
- * UserEventInteraction Entity
- */
 @Entity
 @Table(name = "user_event_interactions", indexes = {
         @Index(name = "idx_user", columnList = "user_id"),

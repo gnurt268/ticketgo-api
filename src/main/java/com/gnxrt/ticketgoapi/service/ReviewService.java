@@ -40,9 +40,6 @@ public class ReviewService {
     private final OrderRepository orderRepository;
     private final UserRepository userRepository;
 
-    /**
-     *
-     */
     public EventReviewSummaryDTO getEventReviewSummary(Long eventId, Long userId) {
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new ResourceNotFoundException("Event", "id", eventId));
@@ -107,17 +104,11 @@ public class ReviewService {
                 .build();
     }
 
-    /**
-     *
-     */
     public Page<ReviewDTO> getEventReviews(Long eventId, Pageable pageable) {
         Page<Review> reviews = reviewRepository.findByEventIdAndIsApprovedTrueOrderByCreatedAtDesc(eventId, pageable);
         return reviews.map(this::mapToDTO);
     }
 
-    /**
-     *
-     */
     @Transactional
     public ReviewDTO createReview(Long userId, CreateReviewRequest request) {
         User user = userRepository.findById(userId)
@@ -156,9 +147,6 @@ public class ReviewService {
         return mapToDTO(review);
     }
 
-    /**
-     *
-     */
     @Transactional
     public ReviewDTO updateReview(Long userId, Long reviewId, CreateReviewRequest request) {
         Review review = reviewRepository.findById(reviewId)
@@ -177,9 +165,6 @@ public class ReviewService {
         return mapToDTO(review);
     }
 
-    /**
-     *
-     */
     @Transactional
     public void deleteReview(Long userId, Long reviewId) {
         Review review = reviewRepository.findById(reviewId)

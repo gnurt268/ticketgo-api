@@ -15,17 +15,14 @@ import java.time.LocalDateTime;
 @EqualsAndHashCode(callSuper = true)
 public class EventRejectedEvent extends BaseEmailEvent {
 
-    // Organizer info
     private Long organizerId;
     private String organizerName;
     private String organizerEmail;
 
-    // Event info
     private Long relatedEventId;
     private String eventTitle;
     private LocalDateTime eventStartDate;
 
-    // Rejection reason
     private String reason;
 
     public static EventRejectedEvent create() {

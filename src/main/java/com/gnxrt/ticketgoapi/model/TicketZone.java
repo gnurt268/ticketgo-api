@@ -11,9 +11,6 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * TicketZone Entity
- */
 @Entity
 @Table(name = "ticket_zones",
         uniqueConstraints = {
@@ -105,7 +102,6 @@ public class TicketZone {
     @Builder.Default
     private List<Ticket> tickets = new ArrayList<>();
 
-    // Helper methods
     public boolean hasAvailableCapacity(Integer quantity) {
         return this.availableCapacity >= quantity;
     }

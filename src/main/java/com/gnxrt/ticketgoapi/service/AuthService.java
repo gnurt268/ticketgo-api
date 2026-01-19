@@ -96,42 +96,33 @@ public class AuthService {
                 .build();
     }
 
-    /**
-     * Refresh access token using refresh token
-     */
     public AuthResponse refreshToken(String refreshToken) {
         log.info("Processing refresh token request");
 
         try {
-            // Extract email from refresh token
             String email = jwtService.extractUsername(refreshToken);
 
             if (email == null) {
                 throw new UnauthorizedException("Invalid refresh token");
             }
 
-            // Find user
             User user = userRepository.findByEmail(email)
                     .orElseThrow(() -> new UnauthorizedException("User not found"));
 
-            // Check if user is active
             if (!user.getIsActive()) {
                 throw new UnauthorizedException("User account is disabled");
             }
 
-            // Build UserDetails
             UserDetails userDetails = org.springframework.security.core.userdetails.User.builder()
                     .username(user.getEmail())
                     .password(user.getPassword())
                     .authorities("ROLE_" + user.getRole().name())
                     .build();
 
-            // Validate refresh token
             if (!jwtService.isTokenValid(refreshToken, userDetails)) {
                 throw new UnauthorizedException("Invalid or expired refresh token");
             }
 
-            // Generate new tokens
             String newAccessToken = jwtService.generateToken(userDetails);
             String newRefreshToken = jwtService.generateRefreshToken(userDetails);
 

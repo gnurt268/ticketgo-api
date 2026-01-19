@@ -9,9 +9,6 @@ import org.hibernate.annotations.UpdateTimestamp;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-/**
- * Review Entity
- */
 @Entity
 @Table(name = "reviews",
         uniqueConstraints = {
@@ -82,7 +79,6 @@ public class Review {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
-    // Helper methods
     public void approve() {
         this.isApproved = true;
     }

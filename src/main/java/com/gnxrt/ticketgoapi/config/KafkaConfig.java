@@ -94,7 +94,7 @@ public class KafkaConfig {
         factory.setConcurrency(3);
 
         factory.setCommonErrorHandler(new DefaultErrorHandler(
-                new FixedBackOff(1000L, 3L) // 3 retries with 1 second interval
+                new FixedBackOff(1000L, 3L)
         ));
 
         return factory;

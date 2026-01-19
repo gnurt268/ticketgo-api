@@ -201,9 +201,6 @@ public class SeatService {
         }
     }
 
-    /**
-     *
-     */
     private SeatReservationDTO doReserveSeats(Long zoneId, ReserveSeatsRequest request) {
         User currentUser = getCurrentUser();
         TicketZone zone = ticketZoneRepository.findById(zoneId)

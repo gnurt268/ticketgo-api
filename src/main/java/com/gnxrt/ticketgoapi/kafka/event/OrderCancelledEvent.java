@@ -22,7 +22,6 @@ public class OrderCancelledEvent extends BaseEmailEvent {
     private BigDecimal totalAmount;
     private String reason;
 
-    // Event info
     private Long relatedEventId;
     private String eventTitle;
 

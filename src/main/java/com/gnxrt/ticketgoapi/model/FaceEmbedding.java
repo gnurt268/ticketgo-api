@@ -9,9 +9,6 @@ import org.hibernate.annotations.UpdateTimestamp;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-/**
- * FaceEmbedding Entity
- */
 @Entity
 @Table(name = "face_embeddings", indexes = {
         @Index(name = "idx_ticket", columnList = "ticket_id")

@@ -8,9 +8,6 @@ import org.hibernate.annotations.CreationTimestamp;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-/**
- * AIRecommendation Entity
- */
 @Entity
 @Table(name = "ai_recommendations",
         uniqueConstraints = {
@@ -70,7 +67,6 @@ public class AIRecommendation {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    // Helper methods
     public boolean isExpired() {
         return this.expiresAt != null && this.expiresAt.isBefore(LocalDateTime.now());
     }

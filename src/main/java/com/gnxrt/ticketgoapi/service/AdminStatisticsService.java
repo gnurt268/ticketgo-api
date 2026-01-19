@@ -33,9 +33,6 @@ public class AdminStatisticsService {
     private final TicketRepository ticketRepository;
     private final CategoryRepository categoryRepository;
 
-    /**
-     *
-     */
     public AdminStatisticsDTO getAllStatistics() {
         log.info("Calculating all statistics for admin dashboard");
 
@@ -49,9 +46,6 @@ public class AdminStatisticsService {
                 .build();
     }
 
-    /**
-     *
-     */
     private AdminStatisticsDTO.UserStats getUserStatistics() {
         LocalDateTime today = LocalDateTime.now().with(LocalTime.MIN);
         LocalDateTime weekAgo = today.minusDays(7);
@@ -81,9 +75,6 @@ public class AdminStatisticsService {
                 .build();
     }
 
-    /**
-     *
-     */
     private AdminStatisticsDTO.EventStats getEventStatistics() {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime monthAgo = now.minusDays(30);
@@ -126,9 +117,6 @@ public class AdminStatisticsService {
                 .build();
     }
 
-    /**
-     *
-     */
     private AdminStatisticsDTO.RevenueStats getRevenueStatistics() {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime today = now.with(LocalTime.MIN);
@@ -176,9 +164,6 @@ public class AdminStatisticsService {
                 .build();
     }
 
-    /**
-     *
-     */
     private AdminStatisticsDTO.TicketStats getTicketStatistics() {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime today = now.with(LocalTime.MIN);
@@ -211,9 +196,6 @@ public class AdminStatisticsService {
                 .build();
     }
 
-    /**
-     *
-     */
     private AdminStatisticsDTO.RecentActivities getRecentActivities() {
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
@@ -271,9 +253,6 @@ public class AdminStatisticsService {
                 .build();
     }
 
-    /**
-     *
-     */
     private AdminStatisticsDTO.TrendData getTrendData() {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime sevenDaysAgo = now.minusDays(7).with(LocalTime.MIN);

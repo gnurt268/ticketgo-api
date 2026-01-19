@@ -8,9 +8,6 @@ import org.hibernate.annotations.CreationTimestamp;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-/**
- * CheckIn Entity
- */
 @Entity
 @Table(name = "check_ins", indexes = {
         @Index(name = "idx_ticket", columnList = "ticket_id"),

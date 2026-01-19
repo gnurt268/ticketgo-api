@@ -24,7 +24,6 @@ public class OrderConfirmationEvent extends BaseEmailEvent {
     private String currency;
     private LocalDateTime orderDate;
 
-    // Event info
     private Long relatedEventId;
     private String eventTitle;
     private String eventVenue;
@@ -32,7 +31,6 @@ public class OrderConfirmationEvent extends BaseEmailEvent {
     private LocalDateTime eventStartDate;
     private String eventPosterUrl;
 
-    // Tickets info
     private List<TicketInfo> tickets;
 
     @Data

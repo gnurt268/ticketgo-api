@@ -25,17 +25,11 @@ public class DistributedLockService {
     private static final long DEFAULT_WAIT_TIME = 5;
     private static final long DEFAULT_LEASE_TIME = 30;
 
-    /**
-     *
-     */
     public boolean tryLockSeat(Long seatId, long waitTime, long leaseTime, TimeUnit unit) {
         String lockKey = SEAT_LOCK_PREFIX + seatId;
         return tryLock(lockKey, waitTime, leaseTime, unit);
     }
 
-    /**
-     *
-     */
     public boolean tryLockSeats(List<Long> seatIds, long waitTime, long leaseTime, TimeUnit unit) {
         if (seatIds == null || seatIds.isEmpty()) {
             return true;
@@ -67,9 +61,6 @@ public class DistributedLockService {
         }
     }
 
-    /**
-     *
-     */
     public void unlockSeats(List<Long> seatIds) {
         if (seatIds == null || seatIds.isEmpty()) {
             return;
@@ -96,41 +87,26 @@ public class DistributedLockService {
         }
     }
 
-    /**
-     *
-     */
     public boolean tryLockZone(Long zoneId, long waitTime, long leaseTime, TimeUnit unit) {
         String lockKey = ZONE_LOCK_PREFIX + zoneId;
         return tryLock(lockKey, waitTime, leaseTime, unit);
     }
 
-    /**
-     *
-     */
     public void unlockZone(Long zoneId) {
         String lockKey = ZONE_LOCK_PREFIX + zoneId;
         unlock(lockKey);
     }
 
-    /**
-     *
-     */
     public boolean tryLockOrder(String orderCode, long waitTime, long leaseTime, TimeUnit unit) {
         String lockKey = ORDER_LOCK_PREFIX + orderCode;
         return tryLock(lockKey, waitTime, leaseTime, unit);
     }
 
-    /**
-     *
-     */
     public void unlockOrder(String orderCode) {
         String lockKey = ORDER_LOCK_PREFIX + orderCode;
         unlock(lockKey);
     }
 
-    /**
-     *
-     */
     public <T> T executeWithSeatLock(List<Long> seatIds, Supplier<T> operation) {
         boolean locked = false;
         try {
@@ -146,9 +122,6 @@ public class DistributedLockService {
         }
     }
 
-    /**
-     *
-     */
     public <T> T executeWithZoneLock(Long zoneId, Supplier<T> operation) {
         boolean locked = false;
         try {
@@ -164,9 +137,6 @@ public class DistributedLockService {
         }
     }
 
-    /**
-     *
-     */
     public <T> T executeWithSeatAndZoneLock(List<Long> seatIds, Long zoneId, Supplier<T> operation) {
         boolean seatLocked = false;
         boolean zoneLocked = false;
@@ -221,9 +191,6 @@ public class DistributedLockService {
         }
     }
 
-    /**
-     *
-     */
     public static class SeatLockException extends RuntimeException {
         public SeatLockException(String message) {
             super(message);

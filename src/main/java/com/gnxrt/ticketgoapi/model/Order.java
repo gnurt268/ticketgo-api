@@ -12,9 +12,6 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Order Entity
- */
 @Entity
 @Table(name = "orders", indexes = {
         @Index(name = "idx_user", columnList = "user_id"),
@@ -101,7 +98,6 @@ public class Order {
     @Builder.Default
     private List<Ticket> tickets = new ArrayList<>();
 
-    // Helper methods
     public boolean isPaid() {
         return this.paymentStatus == PaymentStatus.COMPLETED;
     }

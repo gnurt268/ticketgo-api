@@ -9,9 +9,6 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Category Entity
- */
 @Entity
 @Table(name = "categories", indexes = {
         @Index(name = "idx_slug", columnList = "slug"),

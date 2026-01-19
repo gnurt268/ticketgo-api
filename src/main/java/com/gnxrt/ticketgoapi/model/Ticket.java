@@ -10,9 +10,6 @@ import org.hibernate.annotations.UpdateTimestamp;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-/**
- * Ticket Entity
- */
 @Entity
 @Table(name = "tickets", indexes = {
         @Index(name = "idx_order", columnList = "order_id"),
@@ -126,7 +123,6 @@ public class Ticket {
     private java.util.List<CheckIn> checkIns = new java.util.ArrayList<>();
 
 
-    // Helper methods
     public boolean isActive() {
         return this.status == TicketStatus.ACTIVE;
     }

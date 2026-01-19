@@ -25,7 +25,6 @@ public class TicketEmailEvent extends BaseEmailEvent {
     private String seatCode;
     private String rowNumber;
 
-    // Event info
     private Long relatedEventId;
     private String eventTitle;
     private String eventVenue;

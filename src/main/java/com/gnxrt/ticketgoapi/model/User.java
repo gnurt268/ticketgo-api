@@ -10,9 +10,6 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * User Entity
- */
 @Entity
 @Table(name = "users", indexes = {
         @Index(name = "idx_email", columnList = "email"),

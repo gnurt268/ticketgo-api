@@ -44,9 +44,6 @@ public class QRCodeService {
     @Value("${app.base-url:http://localhost:8080}")
     private String baseUrl;
 
-    /**
-     *
-     */
     public String generateQRCodeBase64(String content) {
         try {
             byte[] qrCodeBytes = generateQRCodeBytes(content);
@@ -57,9 +54,6 @@ public class QRCodeService {
         }
     }
 
-    /**
-     *
-     */
     public byte[] generateQRCodeBytes(String content) {
         try {
             BitMatrix bitMatrix = createBitMatrix(content);
@@ -75,9 +69,6 @@ public class QRCodeService {
         }
     }
 
-    /**
-     *
-     */
     public byte[] generateQRCodeWithLogo(String content, byte[] logoBytes) {
         try {
             BitMatrix bitMatrix = createBitMatrix(content);
@@ -98,9 +89,6 @@ public class QRCodeService {
         }
     }
 
-    /**
-     *
-     */
     public String generateAndSaveQRCode(String content, String fileName) {
         try {
             byte[] qrCodeBytes = generateQRCodeBytes(content);
@@ -123,17 +111,11 @@ public class QRCodeService {
         }
     }
 
-    /**
-     *
-     */
     public String generateTicketQRCodeUrl(String ticketCode, String qrCode) {
         String content = buildTicketQRContent(ticketCode, qrCode);
         return generateAndSaveQRCode(content, "ticket_" + ticketCode);
     }
 
-    /**
-     *
-     */
     public String generateTicketQRCodeBase64(String ticketCode, String qrCode) {
         String content = buildTicketQRContent(ticketCode, qrCode);
         return "data:image/png;base64," + generateQRCodeBase64(content);
@@ -218,9 +200,6 @@ public class QRCodeService {
         }
     }
 
-    /**
-     *
-     */
     private BitMatrix createBitMatrix(String content) throws WriterException {
         Map<EncodeHintType, Object> hints = new HashMap<>();
         hints.put(EncodeHintType.ERROR_CORRECTION, ErrorCorrectionLevel.H);
@@ -231,9 +210,6 @@ public class QRCodeService {
         return qrCodeWriter.encode(content, BarcodeFormat.QR_CODE, qrCodeWidth, qrCodeHeight, hints);
     }
 
-    /**
-     *
-     */
     private BufferedImage addLogoToQRCode(BufferedImage qrImage, BufferedImage logoImage) {
         int qrWidth = qrImage.getWidth();
         int qrHeight = qrImage.getHeight();
@@ -262,9 +238,6 @@ public class QRCodeService {
         return combined;
     }
 
-    /**
-     *
-     */
     public byte[] getQRCodeFromFile(String fileName) {
         try {
             Path filePath = Paths.get(storagePath).resolve(fileName);
@@ -278,9 +251,6 @@ public class QRCodeService {
         }
     }
 
-    /**
-     *
-     */
     public void deleteQRCodeFile(String fileName) {
         try {
             Path filePath = Paths.get(storagePath).resolve(fileName);
@@ -291,9 +261,6 @@ public class QRCodeService {
         }
     }
 
-    /**
-     *
-     */
     @lombok.Data
     @lombok.Builder
     @lombok.NoArgsConstructor

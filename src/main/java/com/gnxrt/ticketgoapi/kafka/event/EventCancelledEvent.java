@@ -24,7 +24,6 @@ public class EventCancelledEvent extends BaseEmailEvent {
     private String seatCode;
     private BigDecimal refundAmount;
 
-    // Event info
     private Long relatedEventId;
     private String eventTitle;
     private LocalDateTime eventStartDate;

@@ -50,9 +50,6 @@ public class OrderService {
     private static final long LOCK_WAIT_TIME = 10; // seconds
     private static final long LOCK_LEASE_TIME = 60; // seconds
 
-    /**
-     *
-     */
     @Transactional
     public OrderDTO createOrder(CreateOrderRequest request, HttpServletRequest httpRequest) {
         log.info("Creating order for event: {}, zone: {}", request.getEventId(), request.getTicketZoneId());
@@ -87,9 +84,6 @@ public class OrderService {
         }
     }
 
-    /**
-     *
-     */
     private OrderDTO doCreateOrder(CreateOrderRequest request, HttpServletRequest httpRequest) {
         User currentUser = getCurrentUser();
 
@@ -380,9 +374,6 @@ public class OrderService {
         });
     }
 
-    /**
-     *
-     */
     public Page<OrderDTO> getAllOrdersForAdmin(String keyword, PaymentStatus paymentStatus, Pageable pageable) {
         Page<Order> orders = orderRepository.findAllForAdmin(keyword, paymentStatus, pageable);
 
@@ -392,9 +383,6 @@ public class OrderService {
         });
     }
 
-    /**
-     *
-     */
     public OrderDTO getOrderByIdForAdmin(Long orderId) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order", "id", orderId));
@@ -403,9 +391,6 @@ public class OrderService {
         return mapToDTO(order, tickets, null);
     }
 
-    /**
-     *
-     */
     public Map<String, Object> getOrderStatistics() {
         Map<String, Object> stats = new HashMap<>();
 
