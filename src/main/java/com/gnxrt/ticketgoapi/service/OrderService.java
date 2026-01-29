@@ -9,7 +9,6 @@ import com.gnxrt.ticketgoapi.exception.ConflictException;
 import com.gnxrt.ticketgoapi.exception.ForbiddenException;
 import com.gnxrt.ticketgoapi.exception.PaymentException;
 import com.gnxrt.ticketgoapi.exception.ResourceNotFoundException;
-import com.gnxrt.ticketgoapi.kafka.producer.EmailEventProducer;
 import com.gnxrt.ticketgoapi.model.*;
 import com.gnxrt.ticketgoapi.repository.*;
 import jakarta.servlet.http.HttpServletRequest;
@@ -43,7 +42,6 @@ public class OrderService {
     private final SeatRepository seatRepository;
     private final UserRepository userRepository;
     private final VNPayService vnPayService;
-    private final EmailEventProducer emailEventProducer;
     private final DistributedLockService distributedLockService;
 
     private static final int PAYMENT_TIMEOUT_MINUTES = 15;
@@ -301,7 +299,8 @@ public class OrderService {
 
             orderRepository.save(order);
 
-            emailEventProducer.sendPaymentSuccessEvent(order, tickets);
+            //TODO send email Payment Success
+            //emailEventProducer.sendPaymentSuccessEvent(order, tickets);
 
             return mapToDTO(order, tickets, null);
 
@@ -332,7 +331,8 @@ public class OrderService {
 
             orderRepository.save(order);
 
-            emailEventProducer.sendPaymentFailedEvent(order, callback.getResponseMessage());
+            //TODO send email Payment Failed
+            //emailEventProducer.sendPaymentFailedEvent(order, callback.getResponseMessage());
 
             throw new PaymentException(callback.getResponseMessage());
         }

@@ -56,12 +56,6 @@
             <version>3.40.2</version>
         </dependency>
 
-        <!-- Kafka -->
-        <dependency>
-            <groupId>org.springframework.kafka</groupId>
-            <artifactId>spring-kafka</artifactId>
-        </dependency>
-
         <!-- QR Code -->
         <dependency>
             <groupId>com.google.zxing</groupId>

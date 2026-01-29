@@ -8,7 +8,6 @@ import com.gnxrt.ticketgoapi.enums.Role;
 import com.gnxrt.ticketgoapi.exception.ConflictException;
 import com.gnxrt.ticketgoapi.exception.ResourceNotFoundException;
 import com.gnxrt.ticketgoapi.exception.UnauthorizedException;
-import com.gnxrt.ticketgoapi.kafka.producer.EmailEventProducer;
 import com.gnxrt.ticketgoapi.model.User;
 import com.gnxrt.ticketgoapi.repository.UserRepository;
 import com.gnxrt.ticketgoapi.security.JwtService;
@@ -32,7 +31,6 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
-    private final EmailEventProducer emailEventProducer;
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
@@ -51,8 +49,8 @@ public class AuthService {
                 .build();
 
         userRepository.save(user);
-
-        emailEventProducer.sendWelcomeEmailEvent(user);
+        //TODO: send email Welcome
+        //emailEventProducer.sendWelcomeEmailEvent(user);
 
         UserDetails userDetails = org.springframework.security.core.userdetails.User.builder()
                 .username(user.getEmail())
