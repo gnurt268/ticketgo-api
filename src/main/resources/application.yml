@@ -11,8 +11,7 @@ spring:
     url: jdbc:mysql://localhost:3306/ticketgo
     username: ${DB_USERNAME:root}
     password: ${DB_PASSWORD:371902}
-    driver-class-name: com.mysql.jdbc.Driver
-
+    driver-class-name: com.mysql.cj.jdbc.Driver
   # Redis
   data:
     redis:
@@ -100,5 +99,3 @@ logging:
   level:
     com.gnxrt.ticketgoapi: DEBUG
     org.springframework.mail: DEBUG
-    org.springframework.kafka: INFO
-    org.apache.kafka: WARN

@@ -31,6 +31,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
+    private final EmailService emailService;
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
@@ -49,8 +50,8 @@ public class AuthService {
                 .build();
 
         userRepository.save(user);
-        //TODO: send email Welcome
-        //emailEventProducer.sendWelcomeEmailEvent(user);
+
+        emailService.sendWelcomeEmail(user);
 
         UserDetails userDetails = org.springframework.security.core.userdetails.User.builder()
                 .username(user.getEmail())

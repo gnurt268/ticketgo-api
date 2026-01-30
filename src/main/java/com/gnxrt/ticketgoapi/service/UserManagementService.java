@@ -238,7 +238,7 @@ public class UserManagementService {
                 .totalEventsOrganized(totalEvents)
                 .totalReviews(totalReviews)
                 .totalInteractions(totalInteractions)
-                .lastLoginAt(null) // TODO: Implement login tracking
+                .lastLoginAt(null) // Login tracking chưa implement - cần thêm field vào User entity
                 .build();
     }
 }

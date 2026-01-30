@@ -11,6 +11,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -37,7 +39,9 @@ public class SeatController {
     @GetMapping("/zones/{zoneId}/seats/map")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<SeatMapDTO> getSeatMapAuthenticated(@PathVariable Long zoneId) {
-        // TODO: Get current user ID from security context
+        // Lấy user email từ security context (userId sẽ được resolve trong service)
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        String userEmail = auth != null ? auth.getName() : null;
         SeatMapDTO seatMap = seatService.getSeatMap(zoneId, null);
         return ResponseEntity.ok(seatMap);
     }

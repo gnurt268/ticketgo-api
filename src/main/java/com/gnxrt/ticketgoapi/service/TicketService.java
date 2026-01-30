@@ -34,6 +34,7 @@ public class TicketService {
     private final TicketRepository ticketRepository;
     private final UserRepository userRepository;
     private final QRCodeService qrCodeService;
+    private final EmailService emailService;
 
     public Page<TicketListDTO> getMyTickets(Pageable pageable) {
         User currentUser = getCurrentUser();
@@ -175,7 +176,7 @@ public class TicketService {
 
         log.info("Ticket transferred: {} from {} to {}", ticketId, originalEmail, request.getRecipientEmail());
 
-        // TODO: Gửi email thông báo cho cả người chuyển và người nhận
+        emailService.sendTicketTransferEmail(ticket, originalEmail);
 
         ticket.setStatus(TicketStatus.ACTIVE);
         ticket = ticketRepository.save(ticket);

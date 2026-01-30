@@ -40,6 +40,7 @@ public class EventManagementService {
     private final CategoryRepository categoryRepository;
     private final UserRepository userRepository;
     private final TicketRepository ticketRepository;
+    private final EmailService emailService;
 
     public Page<EventListDTO> getAllEvents(
             EventStatus status,
@@ -196,10 +197,10 @@ public class EventManagementService {
             throw new BadRequestException("Chỉ có thể gửi duyệt sự kiện ở trạng thái DRAFT");
         }
 
-        // TODO: Validate event has at least one ticket zone
-        // if (event.getTicketZones().isEmpty()) {
-        //     throw new RuntimeException("Event must have at least one ticket zone");
-        // }
+        // Validate event has at least one ticket zone
+        if (event.getTicketZones() == null || event.getTicketZones().isEmpty()) {
+            throw new BadRequestException("Sự kiện phải có ít nhất một khu vực vé trước khi gửi duyệt");
+        }
 
         event.setStatus(EventStatus.PENDING);
         event = eventRepository.save(event);
@@ -301,14 +302,14 @@ public class EventManagementService {
         event.setStatus(EventStatus.CANCELLED);
         event = eventRepository.save(event);
 
-        // Send cancellation emails to all ticket holders via Kafka
+        // Gửi email thông báo hủy sự kiện cho tất cả người có vé (async)
         List<Ticket> activeTickets = ticketRepository.findByEventIdAndStatus(eventId, TicketStatus.ACTIVE);
         for (Ticket ticket : activeTickets) {
-            //TODO send cancel event
-            //emailEventProducer.sendEventCancelledEvent(ticket, reason);
+            emailService.sendEventCancelledEmail(ticket, reason);
         }
 
-        // TODO: Process refunds
+        // Refund process - cần implement riêng với payment gateway
+        // TODO: Implement refund logic khi cần
 
         log.info("Event cancelled successfully with id: {}", event.getId());
         return mapToDetailDTO(event);
@@ -362,8 +363,14 @@ public class EventManagementService {
     }
 
     private EventDetailDTO mapToDetailDTO(Event event) {
-        // TODO: Calculate average rating from reviews
+        // Calculate average rating from reviews - mặc định 0 nếu chưa có review
         Double averageRating = 0.0;
+        if (event.getReviews() != null && !event.getReviews().isEmpty()) {
+            averageRating = event.getReviews().stream()
+                    .mapToInt(r -> r.getRating())
+                    .average()
+                    .orElse(0.0);
+        }
 
         return EventDetailDTO.builder()
                 .id(event.getId())

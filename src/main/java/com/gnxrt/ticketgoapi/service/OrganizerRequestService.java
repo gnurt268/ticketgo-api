@@ -67,8 +67,7 @@ public class OrganizerRequestService {
         organizerRequest = organizerRequestRepository.save(organizerRequest);
         log.info("User {} submitted organizer request {}", userId, organizerRequest.getId());
 
-        // TODO: Gửi email xác nhận đã nhận yêu cầu
-        // emailService.sendOrganizerRequestReceivedEmail(user, organizerRequest);
+        emailService.sendOrganizerRequestReceivedEmail(user, organizerRequest);
 
         return mapToDTO(organizerRequest);
     }
@@ -131,8 +130,7 @@ public class OrganizerRequestService {
 
             log.info("Admin {} approved organizer request {} for user {}", adminId, requestId, user.getId());
 
-            // TODO: Gửi email thông báo được duyệt
-            // emailService.sendOrganizerRequestApprovedEmail(user, request);
+            emailService.sendOrganizerRequestApprovedEmail(user, request);
         } else {
             // Từ chối yêu cầu
             if (reviewRequest.getRejectionReason() == null || reviewRequest.getRejectionReason().isBlank()) {
@@ -143,8 +141,7 @@ public class OrganizerRequestService {
 
             log.info("Admin {} rejected organizer request {}", adminId, requestId);
 
-            // TODO: Gửi email thông báo bị từ chối
-            // emailService.sendOrganizerRequestRejectedEmail(request.getUser(), request);
+            emailService.sendOrganizerRequestRejectedEmail(request.getUser(), request);
         }
 
         request.setReviewedBy(admin);

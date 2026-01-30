@@ -3,6 +3,7 @@ package com.gnxrt.ticketgoapi.service;
 import com.gnxrt.ticketgoapi.config.EmailConfig;
 import com.gnxrt.ticketgoapi.model.Event;
 import com.gnxrt.ticketgoapi.model.Order;
+import com.gnxrt.ticketgoapi.model.OrganizerRequest;
 import com.gnxrt.ticketgoapi.model.Ticket;
 import com.gnxrt.ticketgoapi.model.User;
 import jakarta.mail.MessagingException;
@@ -391,6 +392,82 @@ public class EmailService {
             log.info("Welcome email sent successfully to: {}", user.getEmail());
         } catch (Exception e) {
             log.error("Failed to send welcome email to: {}", user.getEmail(), e);
+        }
+    }
+
+    // ==================== ORGANIZER REQUEST EMAILS ====================
+
+    @Async
+    public void sendOrganizerRequestReceivedEmail(User user, OrganizerRequest request) {
+        log.info("Sending organizer request received email to: {}", user.getEmail());
+
+        try {
+            Context context = createBaseContext();
+            context.setVariable("user", user);
+            context.setVariable("request", request);
+            context.setVariable("requestDate", request.getCreatedAt().format(DATETIME_FORMATTER));
+
+            String htmlContent = templateEngine.process("email/organizer-request-received", context);
+
+            sendHtmlEmail(
+                    user.getEmail(),
+                    "Đã nhận yêu cầu đăng ký Organizer - TicketGo",
+                    htmlContent
+            );
+
+            log.info("Organizer request received email sent successfully to: {}", user.getEmail());
+        } catch (Exception e) {
+            log.error("Failed to send organizer request received email to: {}", user.getEmail(), e);
+        }
+    }
+
+    @Async
+    public void sendOrganizerRequestApprovedEmail(User user, OrganizerRequest request) {
+        log.info("Sending organizer request approved email to: {}", user.getEmail());
+
+        try {
+            Context context = createBaseContext();
+            context.setVariable("user", user);
+            context.setVariable("request", request);
+            context.setVariable("dashboardUrl", emailConfig.getFrontendUrl() + "/organizer/dashboard");
+            context.setVariable("createEventUrl", emailConfig.getFrontendUrl() + "/organizer/events/create");
+
+            String htmlContent = templateEngine.process("email/organizer-request-approved", context);
+
+            sendHtmlEmail(
+                    user.getEmail(),
+                    "Chúc mừng! Yêu cầu đăng ký Organizer đã được duyệt - TicketGo",
+                    htmlContent
+            );
+
+            log.info("Organizer request approved email sent successfully to: {}", user.getEmail());
+        } catch (Exception e) {
+            log.error("Failed to send organizer request approved email to: {}", user.getEmail(), e);
+        }
+    }
+
+    @Async
+    public void sendOrganizerRequestRejectedEmail(User user, OrganizerRequest request) {
+        log.info("Sending organizer request rejected email to: {}", user.getEmail());
+
+        try {
+            Context context = createBaseContext();
+            context.setVariable("user", user);
+            context.setVariable("request", request);
+            context.setVariable("rejectionReason", request.getRejectionReason());
+            context.setVariable("resubmitUrl", emailConfig.getFrontendUrl() + "/become-organizer");
+
+            String htmlContent = templateEngine.process("email/organizer-request-rejected", context);
+
+            sendHtmlEmail(
+                    user.getEmail(),
+                    "Thông báo về yêu cầu đăng ký Organizer - TicketGo",
+                    htmlContent
+            );
+
+            log.info("Organizer request rejected email sent successfully to: {}", user.getEmail());
+        } catch (Exception e) {
+            log.error("Failed to send organizer request rejected email to: {}", user.getEmail(), e);
         }
     }
 

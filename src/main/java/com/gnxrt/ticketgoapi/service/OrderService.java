@@ -43,6 +43,7 @@ public class OrderService {
     private final UserRepository userRepository;
     private final VNPayService vnPayService;
     private final DistributedLockService distributedLockService;
+    private final EmailService emailService;
 
     private static final int PAYMENT_TIMEOUT_MINUTES = 15;
     private static final long LOCK_WAIT_TIME = 10; // seconds
@@ -122,11 +123,12 @@ public class OrderService {
                     throw new BadRequestException("Ghế " + seat.getSeatCode() + " không thuộc khu vực này");
                 }
 
-                if (seat.getStatus() == SeatStatus.AVAILABLE) {
-                } else if (seat.getStatus() == SeatStatus.RESERVED &&
-                        seat.getReservedBy() != null &&
-                        seat.getReservedBy().getId().equals(currentUser.getId())) {
-                } else {
+                boolean isAvailable = seat.getStatus() == SeatStatus.AVAILABLE;
+                boolean isReservedByCurrentUser = seat.getStatus() == SeatStatus.RESERVED
+                        && seat.getReservedBy() != null
+                        && seat.getReservedBy().getId().equals(currentUser.getId());
+
+                if (!isAvailable && !isReservedByCurrentUser) {
                     throw new ConflictException("Ghế " + seat.getSeatCode() + " không khả dụng hoặc đã được đặt bởi người khác");
                 }
             }
@@ -288,7 +290,7 @@ public class OrderService {
             }
             ticketRepository.saveAll(tickets);
 
-            TicketZone zone = tickets.get(0).getTicketZone();
+            TicketZone zone = tickets.getFirst().getTicketZone();
             zone.setReservedCapacity(zone.getReservedCapacity() - order.getQuantity());
             ticketZoneRepository.save(zone);
 
@@ -299,8 +301,7 @@ public class OrderService {
 
             orderRepository.save(order);
 
-            //TODO send email Payment Success
-            //emailEventProducer.sendPaymentSuccessEvent(order, tickets);
+            emailService.sendOrderConfirmationEmail(order, tickets);
 
             return mapToDTO(order, tickets, null);
 
@@ -331,8 +332,7 @@ public class OrderService {
 
             orderRepository.save(order);
 
-            //TODO send email Payment Failed
-            //emailEventProducer.sendPaymentFailedEvent(order, callback.getResponseMessage());
+            emailService.sendPaymentFailedEmail(order, callback.getResponseMessage());
 
             throw new PaymentException(callback.getResponseMessage());
         }
