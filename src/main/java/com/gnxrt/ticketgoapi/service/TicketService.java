@@ -162,7 +162,7 @@ public class TicketService {
         ticket.setHolderIdNumber(request.getRecipientIdNumber());
         ticket.setTransferredFromEmail(originalEmail);
         ticket.setTransferredAt(LocalDateTime.now());
-        ticket.setStatus(TicketStatus.TRANSFERRED);
+        ticket.setStatus(TicketStatus.ACTIVE);
 
         if (ticket.getFaceImageUrl() != null) {
             ticket.setFaceImageUrl(null);
@@ -177,9 +177,6 @@ public class TicketService {
         log.info("Ticket transferred: {} from {} to {}", ticketId, originalEmail, request.getRecipientEmail());
 
         emailService.sendTicketTransferEmail(ticket, originalEmail);
-
-        ticket.setStatus(TicketStatus.ACTIVE);
-        ticket = ticketRepository.save(ticket);
 
         return mapToDTO(ticket);
     }

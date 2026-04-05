@@ -100,6 +100,7 @@ public class EventService {
                 eventType,
                 city,
                 isFeatured,
+                LocalDateTime.now(),
                 pageable
         );
 
@@ -162,13 +163,7 @@ public class EventService {
 
     public List<String> getAvailableCities() {
         log.info("Getting available cities");
-        return eventRepository.findByStatus(EventStatus.PUBLISHED, Pageable.unpaged())
-                .getContent().stream()
-                .map(Event::getCity)
-                .filter(city -> city != null && !city.isEmpty())
-                .distinct()
-                .sorted()
-                .collect(Collectors.toList());
+        return eventRepository.findDistinctCitiesOfPublishedEvents(LocalDateTime.now());
     }
 
     private EventSummaryDTO mapToSummaryDTO(Event event) {

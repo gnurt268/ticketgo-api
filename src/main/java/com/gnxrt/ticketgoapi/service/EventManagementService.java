@@ -60,7 +60,9 @@ public class EventManagementService {
             events = eventRepository.searchAllEvents(keyword, pageable);
         } else {
             events = eventRepository.findByFilters(
-                    status, categoryId, organizerId, eventType, city, isFeatured, pageable
+                    status, categoryId, organizerId, eventType, city, isFeatured,
+                    null,
+                    pageable
             );
         }
 

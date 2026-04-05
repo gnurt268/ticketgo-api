@@ -6,6 +6,7 @@ import com.gnxrt.ticketgoapi.security.CustomAccessDeniedHandler;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
@@ -46,9 +47,14 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**", "/api/events/**", "/api/categories/**").permitAll()
                         .requestMatchers("/api/payment/vnpay/return", "/api/payment/vnpay/ipn").permitAll()
                         .requestMatchers("/api/qrcode/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/reviews/event/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/waiting-room/event/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/waiting-room/slug/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/zones/**").permitAll()
                         .requestMatchers("/api/orders/**").hasAnyRole("USER", "ORGANIZER", "ADMIN")
                         .requestMatchers("/api/tickets/**").hasAnyRole("USER", "ORGANIZER", "ADMIN")
                         .requestMatchers("/api/reviews/**").hasAnyRole("USER", "ORGANIZER", "ADMIN")
+                        .requestMatchers("/api/waiting-room/**").authenticated()
                         .requestMatchers("/api/organizer/**").hasAnyRole("ORGANIZER", "ADMIN")
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()

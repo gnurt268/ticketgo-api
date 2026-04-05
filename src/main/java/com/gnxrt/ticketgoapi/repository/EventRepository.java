@@ -62,7 +62,8 @@ public interface EventRepository extends JpaRepository<Event, Long> {
             "(:organizerId IS NULL OR e.organizer.id = :organizerId) AND " +
             "(:eventType IS NULL OR e.eventType = :eventType) AND " +
             "(:city IS NULL OR e.city = :city) AND " +
-            "(:isFeatured IS NULL OR e.isFeatured = :isFeatured)")
+            "(:isFeatured IS NULL OR e.isFeatured = :isFeatured) AND " +
+            "(:startAfter IS NULL OR e.startDate > :startAfter)")
     Page<Event> findByFilters(
             @Param("status") EventStatus status,
             @Param("categoryId") Long categoryId,
@@ -70,8 +71,12 @@ public interface EventRepository extends JpaRepository<Event, Long> {
             @Param("eventType") EventType eventType,
             @Param("city") String city,
             @Param("isFeatured") Boolean isFeatured,
+            @Param("startAfter") LocalDateTime startAfter,
             Pageable pageable
     );
+
+    @Query("SELECT DISTINCT e.city FROM Event e WHERE e.status = 'PUBLISHED' AND e.city IS NOT NULL AND e.startDate > :now ORDER BY e.city")
+    List<String> findDistinctCitiesOfPublishedEvents(@Param("now") LocalDateTime now);
 
     // ==================== ADMIN STATISTICS METHODS ====================
 
