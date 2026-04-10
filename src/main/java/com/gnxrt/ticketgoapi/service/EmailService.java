@@ -1,24 +1,18 @@
 package com.gnxrt.ticketgoapi.service;
 
 import com.gnxrt.ticketgoapi.config.EmailConfig;
+import com.gnxrt.ticketgoapi.dto.event.EmailEvent;
+import com.gnxrt.ticketgoapi.enums.EmailType;
 import com.gnxrt.ticketgoapi.model.Event;
 import com.gnxrt.ticketgoapi.model.Order;
 import com.gnxrt.ticketgoapi.model.OrganizerRequest;
 import com.gnxrt.ticketgoapi.model.Ticket;
 import com.gnxrt.ticketgoapi.model.User;
-import jakarta.mail.MessagingException;
-import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
-import org.thymeleaf.TemplateEngine;
-import org.thymeleaf.context.Context;
 
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
@@ -29,8 +23,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class EmailService {
 
-    private final JavaMailSender mailSender;
-    private final TemplateEngine templateEngine;
+    private final EmailProducer emailProducer;
     private final EmailConfig emailConfig;
     private final QRCodeService qrCodeService;
 
@@ -38,20 +31,21 @@ public class EmailService {
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
 
-    @Async
+    // ==================== ORDER EMAILS ====================
+
     public void sendOrderConfirmationEmail(Order order, List<Ticket> tickets) {
-        log.info("Sending order confirmation email to: {}", order.getBuyerEmail());
+        log.info("Publishing order confirmation email event for: {}", order.getBuyerEmail());
 
         try {
-            Context context = createBaseContext();
-            context.setVariable("order", order);
-            context.setVariable("tickets", tickets);
-            context.setVariable("event", order.getEvent());
-            context.setVariable("totalAmount", formatCurrency(order.getTotalAmount()));
-            context.setVariable("orderDate", order.getCreatedAt().format(DATETIME_FORMATTER));
-            context.setVariable("eventDate", order.getEvent().getStartDate().format(DATE_FORMATTER));
-            context.setVariable("eventTime", order.getEvent().getStartDate().format(TIME_FORMATTER));
-            context.setVariable("orderDetailUrl", emailConfig.getFrontendUrl() + "/orders/" + order.getOrderCode());
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("order", order);
+            variables.put("tickets", tickets);
+            variables.put("event", order.getEvent());
+            variables.put("totalAmount", formatCurrency(order.getTotalAmount()));
+            variables.put("orderDate", order.getCreatedAt().format(DATETIME_FORMATTER));
+            variables.put("eventDate", order.getEvent().getStartDate().format(DATE_FORMATTER));
+            variables.put("eventTime", order.getEvent().getStartDate().format(TIME_FORMATTER));
+            variables.put("orderDetailUrl", emailConfig.getFrontendUrl() + "/orders/" + order.getOrderCode());
 
             Map<String, String> ticketQRCodes = new HashMap<>();
             Map<String, byte[]> inlineImages = new HashMap<>();
@@ -64,456 +58,396 @@ public class EmailService {
                 ticketQRCodes.put(ticket.getTicketCode(), "cid:" + cid);
                 inlineImages.put(cid, qrCodeBytes);
             }
-            context.setVariable("ticketQRCodes", ticketQRCodes);
+            variables.put("ticketQRCodes", ticketQRCodes);
 
-            String htmlContent = templateEngine.process("email/order-confirmation", context);
+            EmailEvent event = EmailEvent.builder()
+                    .type(EmailType.ORDER_CONFIRMATION)
+                    .to(order.getBuyerEmail())
+                    .subject("Xác nhận đơn hàng #" + order.getOrderCode() + " - " + order.getEvent().getTitle())
+                    .templateName("email/order-confirmation")
+                    .templateVariables(variables)
+                    .inlineImages(inlineImages)
+                    .build();
 
-            sendHtmlEmailWithInlineImages(
-                    order.getBuyerEmail(),
-                    "Xác nhận đơn hàng #" + order.getOrderCode() + " - " + order.getEvent().getTitle(),
-                    htmlContent,
-                    inlineImages
-            );
-
-            log.info("Order confirmation email sent successfully to: {}", order.getBuyerEmail());
+            emailProducer.sendEmailEvent(event);
         } catch (Exception e) {
-            log.error("Failed to send order confirmation email to: {}", order.getBuyerEmail(), e);
+            log.error("Failed to publish order confirmation email event for: {}", order.getBuyerEmail(), e);
         }
     }
 
-    @Async
     public void sendPaymentFailedEmail(Order order, String reason) {
-        log.info("Sending payment failed email to: {}", order.getBuyerEmail());
+        log.info("Publishing payment failed email event for: {}", order.getBuyerEmail());
 
         try {
-            Context context = createBaseContext();
-            context.setVariable("order", order);
-            context.setVariable("event", order.getEvent());
-            context.setVariable("reason", reason);
-            context.setVariable("retryUrl", emailConfig.getFrontendUrl() + "/orders/" + order.getOrderCode() + "/retry");
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("order", order);
+            variables.put("event", order.getEvent());
+            variables.put("reason", reason);
+            variables.put("retryUrl", emailConfig.getFrontendUrl() + "/orders/" + order.getOrderCode() + "/retry");
 
-            String htmlContent = templateEngine.process("email/payment-failed", context);
+            EmailEvent event = EmailEvent.builder()
+                    .type(EmailType.PAYMENT_FAILED)
+                    .to(order.getBuyerEmail())
+                    .subject("Thanh toán thất bại - Đơn hàng #" + order.getOrderCode())
+                    .templateName("email/payment-failed")
+                    .templateVariables(variables)
+                    .build();
 
-            sendHtmlEmail(
-                    order.getBuyerEmail(),
-                    "Thanh toán thất bại - Đơn hàng #" + order.getOrderCode(),
-                    htmlContent
-            );
-
-            log.info("Payment failed email sent successfully to: {}", order.getBuyerEmail());
+            emailProducer.sendEmailEvent(event);
         } catch (Exception e) {
-            log.error("Failed to send payment failed email to: {}", order.getBuyerEmail(), e);
+            log.error("Failed to publish payment failed email event for: {}", order.getBuyerEmail(), e);
         }
     }
 
-    @Async
     public void sendOrderCancelledEmail(Order order, String reason) {
-        log.info("Sending order cancelled email to: {}", order.getBuyerEmail());
+        log.info("Publishing order cancelled email event for: {}", order.getBuyerEmail());
 
         try {
-            Context context = createBaseContext();
-            context.setVariable("order", order);
-            context.setVariable("event", order.getEvent());
-            context.setVariable("reason", reason);
-            context.setVariable("totalAmount", formatCurrency(order.getTotalAmount()));
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("order", order);
+            variables.put("event", order.getEvent());
+            variables.put("reason", reason);
+            variables.put("totalAmount", formatCurrency(order.getTotalAmount()));
 
-            String htmlContent = templateEngine.process("email/order-cancelled", context);
+            EmailEvent event = EmailEvent.builder()
+                    .type(EmailType.ORDER_CANCELLED)
+                    .to(order.getBuyerEmail())
+                    .subject("Đơn hàng đã bị hủy - #" + order.getOrderCode())
+                    .templateName("email/order-cancelled")
+                    .templateVariables(variables)
+                    .build();
 
-            sendHtmlEmail(
-                    order.getBuyerEmail(),
-                    "Đơn hàng đã bị hủy - #" + order.getOrderCode(),
-                    htmlContent
-            );
-
-            log.info("Order cancelled email sent successfully to: {}", order.getBuyerEmail());
+            emailProducer.sendEmailEvent(event);
         } catch (Exception e) {
-            log.error("Failed to send order cancelled email to: {}", order.getBuyerEmail(), e);
+            log.error("Failed to publish order cancelled email event for: {}", order.getBuyerEmail(), e);
         }
     }
 
     // ==================== TICKET EMAILS ====================
 
-    @Async
     public void sendTicketEmail(Ticket ticket) {
-        log.info("Sending ticket email to: {}", ticket.getHolderEmail());
+        log.info("Publishing ticket email event for: {}", ticket.getHolderEmail());
 
         try {
-            Context context = createBaseContext();
-            context.setVariable("ticket", ticket);
-            context.setVariable("event", ticket.getEvent());
-            context.setVariable("eventDate", ticket.getEvent().getStartDate().format(DATE_FORMATTER));
-            context.setVariable("eventTime", ticket.getEvent().getStartDate().format(TIME_FORMATTER));
-            context.setVariable("ticketUrl", emailConfig.getFrontendUrl() + "/tickets/" + ticket.getTicketCode());
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("ticket", ticket);
+            variables.put("event", ticket.getEvent());
+            variables.put("eventDate", ticket.getEvent().getStartDate().format(DATE_FORMATTER));
+            variables.put("eventTime", ticket.getEvent().getStartDate().format(TIME_FORMATTER));
+            variables.put("ticketUrl", emailConfig.getFrontendUrl() + "/tickets/" + ticket.getTicketCode());
 
-            // Generate QR code
             String qrCodeBase64 = qrCodeService.generateTicketQRCodeBase64(ticket.getTicketCode(), ticket.getQrCode());
-            context.setVariable("qrCodeBase64", qrCodeBase64);
+            variables.put("qrCodeBase64", qrCodeBase64);
 
-            String htmlContent = templateEngine.process("email/ticket", context);
+            EmailEvent event = EmailEvent.builder()
+                    .type(EmailType.TICKET)
+                    .to(ticket.getHolderEmail())
+                    .subject("Vé điện tử - " + ticket.getEvent().getTitle())
+                    .templateName("email/ticket")
+                    .templateVariables(variables)
+                    .build();
 
-            sendHtmlEmail(
-                    ticket.getHolderEmail(),
-                    "Vé điện tử - " + ticket.getEvent().getTitle(),
-                    htmlContent
-            );
-
-            log.info("Ticket email sent successfully to: {}", ticket.getHolderEmail());
+            emailProducer.sendEmailEvent(event);
         } catch (Exception e) {
-            log.error("Failed to send ticket email to: {}", ticket.getHolderEmail(), e);
+            log.error("Failed to publish ticket email event for: {}", ticket.getHolderEmail(), e);
         }
     }
 
-    @Async
     public void sendTicketTransferEmail(Ticket ticket, String fromEmail) {
-        log.info("Sending ticket transfer email to: {}", ticket.getHolderEmail());
+        log.info("Publishing ticket transfer email event for: {}", ticket.getHolderEmail());
 
         try {
-            Context context = createBaseContext();
-            context.setVariable("ticket", ticket);
-            context.setVariable("event", ticket.getEvent());
-            context.setVariable("fromEmail", fromEmail);
-            context.setVariable("eventDate", ticket.getEvent().getStartDate().format(DATE_FORMATTER));
-            context.setVariable("eventTime", ticket.getEvent().getStartDate().format(TIME_FORMATTER));
-            context.setVariable("ticketUrl", emailConfig.getFrontendUrl() + "/tickets/" + ticket.getTicketCode());
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("ticket", ticket);
+            variables.put("event", ticket.getEvent());
+            variables.put("fromEmail", fromEmail);
+            variables.put("eventDate", ticket.getEvent().getStartDate().format(DATE_FORMATTER));
+            variables.put("eventTime", ticket.getEvent().getStartDate().format(TIME_FORMATTER));
+            variables.put("ticketUrl", emailConfig.getFrontendUrl() + "/tickets/" + ticket.getTicketCode());
 
-            // Generate QR code
             String qrCodeBase64 = qrCodeService.generateTicketQRCodeBase64(ticket.getTicketCode(), ticket.getQrCode());
-            context.setVariable("qrCodeBase64", qrCodeBase64);
+            variables.put("qrCodeBase64", qrCodeBase64);
 
-            String htmlContent = templateEngine.process("email/ticket-transfer", context);
+            EmailEvent event = EmailEvent.builder()
+                    .type(EmailType.TICKET_TRANSFER)
+                    .to(ticket.getHolderEmail())
+                    .subject("Bạn đã nhận được vé - " + ticket.getEvent().getTitle())
+                    .templateName("email/ticket-transfer")
+                    .templateVariables(variables)
+                    .build();
 
-            sendHtmlEmail(
-                    ticket.getHolderEmail(),
-                    "Bạn đã nhận được vé - " + ticket.getEvent().getTitle(),
-                    htmlContent
-            );
-
-            log.info("Ticket transfer email sent successfully to: {}", ticket.getHolderEmail());
+            emailProducer.sendEmailEvent(event);
         } catch (Exception e) {
-            log.error("Failed to send ticket transfer email to: {}", ticket.getHolderEmail(), e);
+            log.error("Failed to publish ticket transfer email event for: {}", ticket.getHolderEmail(), e);
         }
     }
 
-    @Async
     public void sendTicketTransferNotificationEmail(String fromEmail, Ticket ticket) {
-        log.info("Sending ticket transfer notification to: {}", fromEmail);
+        log.info("Publishing ticket transfer notification event for: {}", fromEmail);
 
         try {
-            Context context = createBaseContext();
-            context.setVariable("ticket", ticket);
-            context.setVariable("event", ticket.getEvent());
-            context.setVariable("newHolderName", ticket.getHolderName());
-            context.setVariable("newHolderEmail", ticket.getHolderEmail());
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("ticket", ticket);
+            variables.put("event", ticket.getEvent());
+            variables.put("newHolderName", ticket.getHolderName());
+            variables.put("newHolderEmail", ticket.getHolderEmail());
 
-            String htmlContent = templateEngine.process("email/ticket-transfer-notification", context);
+            EmailEvent event = EmailEvent.builder()
+                    .type(EmailType.TICKET_TRANSFER_NOTIFICATION)
+                    .to(fromEmail)
+                    .subject("Chuyển nhượng vé thành công - " + ticket.getEvent().getTitle())
+                    .templateName("email/ticket-transfer-notification")
+                    .templateVariables(variables)
+                    .build();
 
-            sendHtmlEmail(
-                    fromEmail,
-                    "Chuyển nhượng vé thành công - " + ticket.getEvent().getTitle(),
-                    htmlContent
-            );
-
-            log.info("Ticket transfer notification sent successfully to: {}", fromEmail);
+            emailProducer.sendEmailEvent(event);
         } catch (Exception e) {
-            log.error("Failed to send ticket transfer notification to: {}", fromEmail, e);
+            log.error("Failed to publish ticket transfer notification event for: {}", fromEmail, e);
         }
     }
 
     // ==================== EVENT EMAILS ====================
 
-    @Async
     public void sendEventReminderEmail(Ticket ticket) {
-        log.info("Sending event reminder email to: {}", ticket.getHolderEmail());
+        log.info("Publishing event reminder email event for: {}", ticket.getHolderEmail());
 
         try {
-            Context context = createBaseContext();
-            context.setVariable("ticket", ticket);
-            context.setVariable("event", ticket.getEvent());
-            context.setVariable("eventDate", ticket.getEvent().getStartDate().format(DATE_FORMATTER));
-            context.setVariable("eventTime", ticket.getEvent().getStartDate().format(TIME_FORMATTER));
-            context.setVariable("ticketUrl", emailConfig.getFrontendUrl() + "/tickets/" + ticket.getTicketCode());
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("ticket", ticket);
+            variables.put("event", ticket.getEvent());
+            variables.put("eventDate", ticket.getEvent().getStartDate().format(DATE_FORMATTER));
+            variables.put("eventTime", ticket.getEvent().getStartDate().format(TIME_FORMATTER));
+            variables.put("ticketUrl", emailConfig.getFrontendUrl() + "/tickets/" + ticket.getTicketCode());
 
-            // Generate QR code
             String qrCodeBase64 = qrCodeService.generateTicketQRCodeBase64(ticket.getTicketCode(), ticket.getQrCode());
-            context.setVariable("qrCodeBase64", qrCodeBase64);
+            variables.put("qrCodeBase64", qrCodeBase64);
 
-            String htmlContent = templateEngine.process("email/event-reminder", context);
+            EmailEvent event = EmailEvent.builder()
+                    .type(EmailType.EVENT_REMINDER)
+                    .to(ticket.getHolderEmail())
+                    .subject("Nhắc nhở: " + ticket.getEvent().getTitle() + " sắp diễn ra!")
+                    .templateName("email/event-reminder")
+                    .templateVariables(variables)
+                    .build();
 
-            sendHtmlEmail(
-                    ticket.getHolderEmail(),
-                    "Nhắc nhở: " + ticket.getEvent().getTitle() + " sắp diễn ra!",
-                    htmlContent
-            );
-
-            log.info("Event reminder email sent successfully to: {}", ticket.getHolderEmail());
+            emailProducer.sendEmailEvent(event);
         } catch (Exception e) {
-            log.error("Failed to send event reminder email to: {}", ticket.getHolderEmail(), e);
+            log.error("Failed to publish event reminder email event for: {}", ticket.getHolderEmail(), e);
         }
     }
 
-    @Async
     public void sendEventCancelledEmail(Ticket ticket, String reason) {
-        log.info("Sending event cancelled email to: {}", ticket.getHolderEmail());
+        log.info("Publishing event cancelled email event for: {}", ticket.getHolderEmail());
 
         try {
-            Context context = createBaseContext();
-            context.setVariable("ticket", ticket);
-            context.setVariable("event", ticket.getEvent());
-            context.setVariable("reason", reason);
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("ticket", ticket);
+            variables.put("event", ticket.getEvent());
+            variables.put("reason", reason);
 
-            String htmlContent = templateEngine.process("email/event-cancelled", context);
+            EmailEvent event = EmailEvent.builder()
+                    .type(EmailType.EVENT_CANCELLED)
+                    .to(ticket.getHolderEmail())
+                    .subject("Sự kiện đã bị hủy - " + ticket.getEvent().getTitle())
+                    .templateName("email/event-cancelled")
+                    .templateVariables(variables)
+                    .build();
 
-            sendHtmlEmail(
-                    ticket.getHolderEmail(),
-                    "Sự kiện đã bị hủy - " + ticket.getEvent().getTitle(),
-                    htmlContent
-            );
-
-            log.info("Event cancelled email sent successfully to: {}", ticket.getHolderEmail());
+            emailProducer.sendEmailEvent(event);
         } catch (Exception e) {
-            log.error("Failed to send event cancelled email to: {}", ticket.getHolderEmail(), e);
+            log.error("Failed to publish event cancelled email event for: {}", ticket.getHolderEmail(), e);
         }
     }
 
-    @Async
-    public void sendEventApprovedEmail(Event event) {
-        log.info("Sending event approved email to: {}", event.getOrganizer().getEmail());
+    public void sendEventApprovedEmail(Event evt) {
+        log.info("Publishing event approved email event for: {}", evt.getOrganizer().getEmail());
 
         try {
-            Context context = createBaseContext();
-            context.setVariable("event", event);
-            context.setVariable("organizer", event.getOrganizer());
-            context.setVariable("eventUrl", emailConfig.getFrontendUrl() + "/organizer/events/" + event.getId());
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("event", evt);
+            variables.put("organizer", evt.getOrganizer());
+            variables.put("eventUrl", emailConfig.getFrontendUrl() + "/organizer/events/" + evt.getId());
 
-            String htmlContent = templateEngine.process("email/event-approved", context);
+            EmailEvent event = EmailEvent.builder()
+                    .type(EmailType.EVENT_APPROVED)
+                    .to(evt.getOrganizer().getEmail())
+                    .subject("Sự kiện đã được duyệt - " + evt.getTitle())
+                    .templateName("email/event-approved")
+                    .templateVariables(variables)
+                    .build();
 
-            sendHtmlEmail(
-                    event.getOrganizer().getEmail(),
-                    "Sự kiện đã được duyệt - " + event.getTitle(),
-                    htmlContent
-            );
-
-            log.info("Event approved email sent successfully to: {}", event.getOrganizer().getEmail());
+            emailProducer.sendEmailEvent(event);
         } catch (Exception e) {
-            log.error("Failed to send event approved email to: {}", event.getOrganizer().getEmail(), e);
+            log.error("Failed to publish event approved email event for: {}", evt.getOrganizer().getEmail(), e);
         }
     }
 
-    @Async
-    public void sendEventRejectedEmail(Event event, String reason) {
-        log.info("Sending event rejected email to: {}", event.getOrganizer().getEmail());
+    public void sendEventRejectedEmail(Event evt, String reason) {
+        log.info("Publishing event rejected email event for: {}", evt.getOrganizer().getEmail());
 
         try {
-            Context context = createBaseContext();
-            context.setVariable("event", event);
-            context.setVariable("organizer", event.getOrganizer());
-            context.setVariable("reason", reason);
-            context.setVariable("eventUrl", emailConfig.getFrontendUrl() + "/organizer/events/" + event.getId());
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("event", evt);
+            variables.put("organizer", evt.getOrganizer());
+            variables.put("reason", reason);
+            variables.put("eventUrl", emailConfig.getFrontendUrl() + "/organizer/events/" + evt.getId());
 
-            String htmlContent = templateEngine.process("email/event-rejected", context);
+            EmailEvent event = EmailEvent.builder()
+                    .type(EmailType.EVENT_REJECTED)
+                    .to(evt.getOrganizer().getEmail())
+                    .subject("Sự kiện không được duyệt - " + evt.getTitle())
+                    .templateName("email/event-rejected")
+                    .templateVariables(variables)
+                    .build();
 
-            sendHtmlEmail(
-                    event.getOrganizer().getEmail(),
-                    "Sự kiện không được duyệt - " + event.getTitle(),
-                    htmlContent
-            );
-
-            log.info("Event rejected email sent successfully to: {}", event.getOrganizer().getEmail());
+            emailProducer.sendEmailEvent(event);
         } catch (Exception e) {
-            log.error("Failed to send event rejected email to: {}", event.getOrganizer().getEmail(), e);
+            log.error("Failed to publish event rejected email event for: {}", evt.getOrganizer().getEmail(), e);
         }
     }
 
     // ==================== AUTH EMAILS ====================
 
-    @Async
     public void sendVerificationEmail(User user, String verificationToken) {
-        log.info("Sending verification email to: {}", user.getEmail());
+        log.info("Publishing verification email event for: {}", user.getEmail());
 
         try {
-            Context context = createBaseContext();
-            context.setVariable("user", user);
-            context.setVariable("verificationUrl", emailConfig.getFrontendUrl() + "/verify-email?token=" + verificationToken);
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("user", user);
+            variables.put("verificationUrl", emailConfig.getFrontendUrl() + "/verify-email?token=" + verificationToken);
 
-            String htmlContent = templateEngine.process("email/verify-email", context);
+            EmailEvent event = EmailEvent.builder()
+                    .type(EmailType.VERIFICATION)
+                    .to(user.getEmail())
+                    .subject("Xác thực tài khoản TicketGo")
+                    .templateName("email/verify-email")
+                    .templateVariables(variables)
+                    .build();
 
-            sendHtmlEmail(
-                    user.getEmail(),
-                    "Xác thực tài khoản TicketGo",
-                    htmlContent
-            );
-
-            log.info("Verification email sent successfully to: {}", user.getEmail());
+            emailProducer.sendEmailEvent(event);
         } catch (Exception e) {
-            log.error("Failed to send verification email to: {}", user.getEmail(), e);
+            log.error("Failed to publish verification email event for: {}", user.getEmail(), e);
         }
     }
 
-    @Async
     public void sendPasswordResetEmail(User user, String resetToken) {
-        log.info("Sending password reset email to: {}", user.getEmail());
+        log.info("Publishing password reset email event for: {}", user.getEmail());
 
         try {
-            Context context = createBaseContext();
-            context.setVariable("user", user);
-            context.setVariable("resetUrl", emailConfig.getFrontendUrl() + "/reset-password?token=" + resetToken);
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("user", user);
+            variables.put("resetUrl", emailConfig.getFrontendUrl() + "/reset-password?token=" + resetToken);
 
-            String htmlContent = templateEngine.process("email/reset-password", context);
+            EmailEvent event = EmailEvent.builder()
+                    .type(EmailType.PASSWORD_RESET)
+                    .to(user.getEmail())
+                    .subject("Đặt lại mật khẩu TicketGo")
+                    .templateName("email/reset-password")
+                    .templateVariables(variables)
+                    .build();
 
-            sendHtmlEmail(
-                    user.getEmail(),
-                    "Đặt lại mật khẩu TicketGo",
-                    htmlContent
-            );
-
-            log.info("Password reset email sent successfully to: {}", user.getEmail());
+            emailProducer.sendEmailEvent(event);
         } catch (Exception e) {
-            log.error("Failed to send password reset email to: {}", user.getEmail(), e);
+            log.error("Failed to publish password reset email event for: {}", user.getEmail(), e);
         }
     }
 
-    @Async
     public void sendWelcomeEmail(User user) {
-        log.info("Sending welcome email to: {}", user.getEmail());
+        log.info("Publishing welcome email event for: {}", user.getEmail());
 
         try {
-            Context context = createBaseContext();
-            context.setVariable("user", user);
-            context.setVariable("exploreUrl", emailConfig.getFrontendUrl() + "/events");
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("user", user);
+            variables.put("exploreUrl", emailConfig.getFrontendUrl() + "/events");
 
-            String htmlContent = templateEngine.process("email/welcome", context);
+            EmailEvent event = EmailEvent.builder()
+                    .type(EmailType.WELCOME)
+                    .to(user.getEmail())
+                    .subject("Chào mừng bạn đến với TicketGo!")
+                    .templateName("email/welcome")
+                    .templateVariables(variables)
+                    .build();
 
-            sendHtmlEmail(
-                    user.getEmail(),
-                    "Chào mừng bạn đến với TicketGo!",
-                    htmlContent
-            );
-
-            log.info("Welcome email sent successfully to: {}", user.getEmail());
+            emailProducer.sendEmailEvent(event);
         } catch (Exception e) {
-            log.error("Failed to send welcome email to: {}", user.getEmail(), e);
+            log.error("Failed to publish welcome email event for: {}", user.getEmail(), e);
         }
     }
 
     // ==================== ORGANIZER REQUEST EMAILS ====================
 
-    @Async
     public void sendOrganizerRequestReceivedEmail(User user, OrganizerRequest request) {
-        log.info("Sending organizer request received email to: {}", user.getEmail());
+        log.info("Publishing organizer request received email event for: {}", user.getEmail());
 
         try {
-            Context context = createBaseContext();
-            context.setVariable("user", user);
-            context.setVariable("request", request);
-            context.setVariable("requestDate", request.getCreatedAt().format(DATETIME_FORMATTER));
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("user", user);
+            variables.put("request", request);
+            variables.put("requestDate", request.getCreatedAt().format(DATETIME_FORMATTER));
 
-            String htmlContent = templateEngine.process("email/organizer-request-received", context);
+            EmailEvent event = EmailEvent.builder()
+                    .type(EmailType.ORGANIZER_REQUEST_RECEIVED)
+                    .to(user.getEmail())
+                    .subject("Đã nhận yêu cầu đăng ký Organizer - TicketGo")
+                    .templateName("email/organizer-request-received")
+                    .templateVariables(variables)
+                    .build();
 
-            sendHtmlEmail(
-                    user.getEmail(),
-                    "Đã nhận yêu cầu đăng ký Organizer - TicketGo",
-                    htmlContent
-            );
-
-            log.info("Organizer request received email sent successfully to: {}", user.getEmail());
+            emailProducer.sendEmailEvent(event);
         } catch (Exception e) {
-            log.error("Failed to send organizer request received email to: {}", user.getEmail(), e);
+            log.error("Failed to publish organizer request received email event for: {}", user.getEmail(), e);
         }
     }
 
-    @Async
     public void sendOrganizerRequestApprovedEmail(User user, OrganizerRequest request) {
-        log.info("Sending organizer request approved email to: {}", user.getEmail());
+        log.info("Publishing organizer request approved email event for: {}", user.getEmail());
 
         try {
-            Context context = createBaseContext();
-            context.setVariable("user", user);
-            context.setVariable("request", request);
-            context.setVariable("dashboardUrl", emailConfig.getFrontendUrl() + "/organizer/dashboard");
-            context.setVariable("createEventUrl", emailConfig.getFrontendUrl() + "/organizer/events/create");
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("user", user);
+            variables.put("request", request);
+            variables.put("dashboardUrl", emailConfig.getFrontendUrl() + "/organizer/dashboard");
+            variables.put("createEventUrl", emailConfig.getFrontendUrl() + "/organizer/events/create");
 
-            String htmlContent = templateEngine.process("email/organizer-request-approved", context);
+            EmailEvent event = EmailEvent.builder()
+                    .type(EmailType.ORGANIZER_REQUEST_APPROVED)
+                    .to(user.getEmail())
+                    .subject("Chúc mừng! Yêu cầu đăng ký Organizer đã được duyệt - TicketGo")
+                    .templateName("email/organizer-request-approved")
+                    .templateVariables(variables)
+                    .build();
 
-            sendHtmlEmail(
-                    user.getEmail(),
-                    "Chúc mừng! Yêu cầu đăng ký Organizer đã được duyệt - TicketGo",
-                    htmlContent
-            );
-
-            log.info("Organizer request approved email sent successfully to: {}", user.getEmail());
+            emailProducer.sendEmailEvent(event);
         } catch (Exception e) {
-            log.error("Failed to send organizer request approved email to: {}", user.getEmail(), e);
+            log.error("Failed to publish organizer request approved email event for: {}", user.getEmail(), e);
         }
     }
 
-    @Async
     public void sendOrganizerRequestRejectedEmail(User user, OrganizerRequest request) {
-        log.info("Sending organizer request rejected email to: {}", user.getEmail());
+        log.info("Publishing organizer request rejected email event for: {}", user.getEmail());
 
         try {
-            Context context = createBaseContext();
-            context.setVariable("user", user);
-            context.setVariable("request", request);
-            context.setVariable("rejectionReason", request.getRejectionReason());
-            context.setVariable("resubmitUrl", emailConfig.getFrontendUrl() + "/become-organizer");
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("user", user);
+            variables.put("request", request);
+            variables.put("rejectionReason", request.getRejectionReason());
+            variables.put("resubmitUrl", emailConfig.getFrontendUrl() + "/become-organizer");
 
-            String htmlContent = templateEngine.process("email/organizer-request-rejected", context);
+            EmailEvent event = EmailEvent.builder()
+                    .type(EmailType.ORGANIZER_REQUEST_REJECTED)
+                    .to(user.getEmail())
+                    .subject("Thông báo về yêu cầu đăng ký Organizer - TicketGo")
+                    .templateName("email/organizer-request-rejected")
+                    .templateVariables(variables)
+                    .build();
 
-            sendHtmlEmail(
-                    user.getEmail(),
-                    "Thông báo về yêu cầu đăng ký Organizer - TicketGo",
-                    htmlContent
-            );
-
-            log.info("Organizer request rejected email sent successfully to: {}", user.getEmail());
+            emailProducer.sendEmailEvent(event);
         } catch (Exception e) {
-            log.error("Failed to send organizer request rejected email to: {}", user.getEmail(), e);
+            log.error("Failed to publish organizer request rejected email event for: {}", user.getEmail(), e);
         }
     }
 
     // ==================== HELPER METHODS ====================
-
-    private void sendHtmlEmail(String to, String subject, String htmlContent) throws MessagingException {
-        MimeMessage message = mailSender.createMimeMessage();
-        MimeMessageHelper helper = new MimeMessageHelper(message, true, StandardCharsets.UTF_8.name());
-
-        helper.setFrom(emailConfig.getFromAddress());
-        helper.setTo(to);
-        helper.setSubject(subject);
-        helper.setText(htmlContent, true);
-
-        mailSender.send(message);
-    }
-
-    private void sendHtmlEmailWithInlineImages(String to, String subject, String htmlContent,
-                                               Map<String, byte[]> inlineImages) throws MessagingException {
-        MimeMessage message = mailSender.createMimeMessage();
-        MimeMessageHelper helper = new MimeMessageHelper(message, true, StandardCharsets.UTF_8.name());
-
-        helper.setFrom(emailConfig.getFromAddress());
-        helper.setTo(to);
-        helper.setSubject(subject);
-        helper.setText(htmlContent, true);
-
-        // Add inline images
-        for (Map.Entry<String, byte[]> entry : inlineImages.entrySet()) {
-            helper.addInline(entry.getKey(),
-                    new org.springframework.core.io.ByteArrayResource(entry.getValue()),
-                    "image/png");
-        }
-
-        mailSender.send(message);
-    }
-
-    private Context createBaseContext() {
-        Context context = new Context();
-        context.setVariable("logoUrl", emailConfig.getLogoUrl());
-        context.setVariable("frontendUrl", emailConfig.getFrontendUrl());
-        context.setVariable("supportEmail", emailConfig.getSupportEmail());
-        context.setVariable("hotline", emailConfig.getHotline());
-        context.setVariable("currentYear", java.time.Year.now().getValue());
-        return context;
-    }
 
     private String formatCurrency(BigDecimal amount) {
         if (amount == null) return "0 ₫";

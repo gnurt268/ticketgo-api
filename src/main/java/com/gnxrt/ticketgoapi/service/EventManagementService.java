@@ -228,15 +228,13 @@ public class EventManagementService {
             event.setStatus(EventStatus.APPROVED);
             log.info("Event approved with id: {}", event.getId());
 
-            // Send approval email
-            //emailEventProducer.sendEventApprovedEvent(event);
+            emailService.sendEventApprovedEmail(event);
 
         } else if ("REJECT".equals(action)) {
             event.setStatus(EventStatus.DRAFT);
             log.info("Event rejected with id: {}. Reason: {}", event.getId(), request.getReason());
 
-            // Send rejection email
-            //emailEventProducer.sendEventRejectedEvent(event, request.getReason());
+            emailService.sendEventRejectedEmail(event, request.getReason());
 
         } else {
             throw new BadRequestException("Hành động không hợp lệ. Phải là APPROVE hoặc REJECT");
