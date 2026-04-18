@@ -1,5 +1,6 @@
 package com.gnxrt.ticketgoapi.security;
 
+import com.gnxrt.ticketgoapi.service.TokenBlacklistService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -24,6 +25,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
     private final UserDetailsService userDetailsService;
+    private final TokenBlacklistService tokenBlacklistService;
 
     @Override
     protected void doFilterInternal(
@@ -42,6 +44,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         try {
             final String jwt = authHeader.substring(7);
             final String userEmail = jwtService.extractUsername(jwt);
+            final String jti = jwtService.extractJti(jwt);
+
+            if (tokenBlacklistService.isBlacklisted(jti)) {
+                log.debug("Rejecting blacklisted token jti={}", jti);
+                filterChain.doFilter(request, response);
+                return;
+            }
 
             if (userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                 UserDetails userDetails = this.userDetailsService.loadUserByUsername(userEmail);
