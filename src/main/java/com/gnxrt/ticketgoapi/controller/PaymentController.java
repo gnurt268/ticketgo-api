@@ -46,7 +46,10 @@ public class PaymentController {
         } catch (Exception e) {
             log.error("Payment processing error", e);
 
-            String orderCode = request.getParameter("vnp_TxnRef");
+            String txnRef = request.getParameter("vnp_TxnRef");
+            String orderCode = txnRef != null && txnRef.contains("-")
+                    ? txnRef.substring(0, txnRef.lastIndexOf('-'))
+                    : txnRef;
 
             String redirectUrl = frontendUrl + "/payment/failed?orderCode=" + orderCode + "&message=" + e.getMessage();
             response.sendRedirect(redirectUrl);
@@ -129,39 +132,7 @@ public class PaymentController {
             @PathVariable String orderCode,
             HttpServletRequest request
     ) {
-        log.info("Retrying payment for order: {}", orderCode);
-
-        OrderDTO order = orderService.getOrderByCode(orderCode);
-
-        if (order.getPaymentStatus() != PaymentStatus.PENDING) {
-            throw new RuntimeException("Can only retry pending orders");
-        }
-
-        if (order.getRemainingSeconds() <= 0) {
-            throw new RuntimeException("Order has expired. Please create a new order.");
-        }
-
-        String paymentUrl = vnPayService.createPaymentUrl(
-                order.getOrderCode(),
-                order.getTotalAmount(),
-                "Thanh toan ve su kien: " + order.getEventTitle(),
-                vnPayService.getIpAddress(request)
-        );
-
-        PaymentDTO payment = PaymentDTO.builder()
-                .orderCode(order.getOrderCode())
-                .orderId(order.getId())
-                .amount(order.getTotalAmount())
-                .currency(order.getCurrency())
-                .status(order.getPaymentStatus())
-                .paymentMethod(order.getPaymentMethod())
-                .paymentUrl(paymentUrl)
-                .expiredAt(order.getPaymentExpiredAt())
-                .remainingSeconds(order.getRemainingSeconds())
-                .message("Payment URL generated successfully")
-                .build();
-
-        return ResponseEntity.ok(payment);
+        return ResponseEntity.ok(orderService.retryPayment(orderCode, request));
     }
 
     private String getStatusMessage(PaymentStatus status) {

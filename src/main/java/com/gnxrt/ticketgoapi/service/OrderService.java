@@ -2,6 +2,7 @@ package com.gnxrt.ticketgoapi.service;
 
 import com.gnxrt.ticketgoapi.dto.request.order.CreateOrderRequest;
 import com.gnxrt.ticketgoapi.dto.response.order.OrderDTO;
+import com.gnxrt.ticketgoapi.dto.response.payment.PaymentDTO;
 import com.gnxrt.ticketgoapi.dto.response.payment.VNPayCallbackDTO;
 import com.gnxrt.ticketgoapi.enums.*;
 import com.gnxrt.ticketgoapi.exception.BadRequestException;
@@ -36,6 +37,7 @@ import java.util.stream.Collectors;
 public class OrderService {
 
     private final OrderRepository orderRepository;
+    private final PaymentRepository paymentRepository;
     private final EventRepository eventRepository;
     private final TicketZoneRepository ticketZoneRepository;
     private final TicketRepository ticketRepository;
@@ -180,16 +182,26 @@ public class OrderService {
                 .totalAmount(totalAmount)
                 .currency(zone.getCurrency())
                 .quantity(quantity)
-                .paymentMethod(PaymentMethod.VNPAY)
                 .paymentStatus(PaymentStatus.PENDING)
                 .buyerName(request.getBuyerName())
                 .buyerEmail(request.getBuyerEmail())
                 .buyerPhone(request.getBuyerPhone())
                 .notes(request.getNotes())
-                .ipAddress(vnPayService.getIpAddress(httpRequest))
                 .build();
 
         order = orderRepository.save(order);
+
+        String txnRef = buildVnpTxnRef(order.getOrderCode(), order.getId());
+
+        Payment payment = Payment.builder()
+                .order(order)
+                .paymentMethod(PaymentMethod.VNPAY)
+                .status(PaymentStatus.PENDING)
+                .amount(totalAmount)
+                .vnpTxnRef(txnRef)
+                .ipAddress(vnPayService.getIpAddress(httpRequest))
+                .build();
+        paymentRepository.save(payment);
 
         List<Ticket> tickets = new ArrayList<>();
         for (int i = 0; i < quantity; i++) {
@@ -235,7 +247,7 @@ public class OrderService {
         }
 
         String paymentUrl = vnPayService.createPaymentUrl(
-                orderCode,
+                txnRef,
                 totalAmount,
                 "Thanh toan ve su kien: " + event.getTitle(),
                 vnPayService.getIpAddress(httpRequest)
@@ -255,13 +267,47 @@ public class OrderService {
         }
 
         VNPayCallbackDTO callback = vnPayService.processCallback(request);
-        String orderCode = callback.getVnpTxnRef();
+        String vnpTxnRef = callback.getVnpTxnRef();
 
-        Order order = orderRepository.findByOrderCode(orderCode)
-                .orElseThrow(() -> new ResourceNotFoundException("Order", "orderCode", orderCode));
+        Payment payment = paymentRepository.findByVnpTxnRef(vnpTxnRef)
+                .orElseThrow(() -> new ResourceNotFoundException("Payment", "vnpTxnRef", vnpTxnRef));
 
-        if (order.getPaymentStatus() != PaymentStatus.PENDING) {
-            log.warn("Order already processed: {}, status: {}", orderCode, order.getPaymentStatus());
+        OrderDTO dto = applyCallbackResult(payment, callback);
+
+        if (payment.getStatus() == PaymentStatus.FAILED && !callback.isSuccess()) {
+            throw new PaymentException(callback.getResponseMessage());
+        }
+
+        return dto;
+    }
+
+    /**
+     * Entry-point cho reconciliation job: re-fetch Payment trong tx rồi apply.
+     * Dùng khi caller có Payment từ query ngoài tx (lazy associations chưa load).
+     */
+    @Transactional
+    public void applyQuerydrResult(Long paymentId, VNPayCallbackDTO callback) {
+        Payment payment = paymentRepository.findById(paymentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Payment", "id", paymentId));
+        applyCallbackResult(payment, callback);
+    }
+
+    /**
+     * Áp kết quả callback/querydr của VNPay lên Payment + Order + Tickets.
+     * Dùng chung cho cả return URL/IPN callback và job reconciliation.
+     *
+     * Caller phải đảm bảo Payment còn managed (gọi trong tx).
+     * Idempotent: nếu Payment không còn PENDING thì no-op và trả DTO hiện tại.
+     * Không throw khi payment fail — caller tự quyết định hành vi.
+     */
+    @Transactional
+    public OrderDTO applyCallbackResult(Payment payment, VNPayCallbackDTO callback) {
+        Order order = payment.getOrder();
+        String vnpTxnRef = payment.getVnpTxnRef();
+        String orderCode = order.getOrderCode();
+
+        if (payment.getStatus() != PaymentStatus.PENDING) {
+            log.warn("Payment already processed: vnpTxnRef={}, status={}", vnpTxnRef, payment.getStatus());
             List<Ticket> tickets = ticketRepository.findByOrderId(order.getId());
             return mapToDTO(order, tickets, null);
         }
@@ -269,12 +315,20 @@ public class OrderService {
         if (callback.isSuccess()) {
             log.info("Payment successful for order: {}", orderCode);
 
-            order.setPaymentStatus(PaymentStatus.COMPLETED);
-            order.setPaymentTransactionId(callback.getVnpTransactionNo());
-            order.setPaidAt(LocalDateTime.ofInstant(
+            payment.setStatus(PaymentStatus.COMPLETED);
+            payment.setTransactionId(callback.getVnpTransactionNo());
+            payment.setBankCode(callback.getVnpBankCode());
+            payment.setBankTransactionNo(callback.getVnpBankTranNo());
+            payment.setCardType(callback.getVnpCardType());
+            payment.setResponseCode(callback.getVnpResponseCode());
+            payment.setResponseMessage(callback.getResponseMessage());
+            payment.setPaidAt(LocalDateTime.ofInstant(
                     vnPayService.parsePayDate(callback.getVnpPayDate()).toInstant(),
                     ZoneId.systemDefault()
             ));
+            paymentRepository.save(payment);
+
+            order.setPaymentStatus(PaymentStatus.COMPLETED);
 
             List<Ticket> tickets = ticketRepository.findByOrderId(order.getId());
             for (Ticket ticket : tickets) {
@@ -304,38 +358,26 @@ public class OrderService {
             emailService.sendOrderConfirmationEmail(order, tickets);
 
             return mapToDTO(order, tickets, null);
-
-        } else {
-            log.warn("Payment failed for order: {}, code: {}", orderCode, callback.getVnpResponseCode());
-
-            order.setPaymentStatus(PaymentStatus.FAILED);
-            orderRepository.save(order);
-
-            List<Ticket> tickets = ticketRepository.findByOrderId(order.getId());
-            for (Ticket ticket : tickets) {
-                ticket.setStatus(TicketStatus.CANCELLED);
-
-                if (ticket.getSeat() != null) {
-                    Seat seat = ticket.getSeat();
-                    seat.setStatus(SeatStatus.AVAILABLE);
-                    seat.setReservedBy(null);
-                    seat.setReservedUntil(null);
-                    seatRepository.save(seat);
-                }
-            }
-            ticketRepository.saveAll(tickets);
-
-            TicketZone zone = tickets.get(0).getTicketZone();
-            zone.setAvailableCapacity(zone.getAvailableCapacity() + order.getQuantity());
-            zone.setReservedCapacity(zone.getReservedCapacity() - order.getQuantity());
-            ticketZoneRepository.save(zone);
-
-            orderRepository.save(order);
-
-            emailService.sendPaymentFailedEmail(order, callback.getResponseMessage());
-
-            throw new PaymentException(callback.getResponseMessage());
         }
+
+        // Order ở trạng thái PENDING để user có thể retry (tạo Payment mới).
+        // Tickets/seats/capacity chỉ được release khi user cancel hoặc job cancelExpiredOrders chạy.
+        log.warn("Payment failed for order: {}, code: {}", orderCode, callback.getVnpResponseCode());
+
+        payment.setStatus(PaymentStatus.FAILED);
+        payment.setResponseCode(callback.getVnpResponseCode());
+        payment.setResponseMessage(callback.getResponseMessage());
+        payment.setBankCode(callback.getVnpBankCode());
+        payment.setBankTransactionNo(callback.getVnpBankTranNo());
+        payment.setCardType(callback.getVnpCardType());
+        paymentRepository.save(payment);
+
+        orderRepository.save(order);
+
+        emailService.sendPaymentFailedEmail(order, callback.getResponseMessage());
+
+        List<Ticket> tickets = ticketRepository.findByOrderId(order.getId());
+        return mapToDTO(order, tickets, null);
     }
 
     public OrderDTO getOrderByCode(String orderCode) {
@@ -349,6 +391,68 @@ public class OrderService {
 
         List<Ticket> tickets = ticketRepository.findByOrderId(order.getId());
         return mapToDTO(order, tickets, null);
+    }
+
+    @Transactional
+    public PaymentDTO retryPayment(String orderCode, HttpServletRequest httpRequest) {
+        log.info("Retrying payment for order: {}", orderCode);
+
+        Order order = orderRepository.findByOrderCode(orderCode)
+                .orElseThrow(() -> new ResourceNotFoundException("Order", "orderCode", orderCode));
+
+        User currentUser = getCurrentUser();
+        if (!order.getUser().getId().equals(currentUser.getId()) && !currentUser.isAdmin()) {
+            throw new ForbiddenException("Bạn không có quyền thanh toán đơn hàng này");
+        }
+
+        if (order.getPaymentStatus() != PaymentStatus.PENDING) {
+            throw new BadRequestException("Chỉ có thể retry đơn hàng đang chờ thanh toán");
+        }
+
+        LocalDateTime expiredAt = order.getCreatedAt().plusMinutes(PAYMENT_TIMEOUT_MINUTES);
+        long remainingSeconds = ChronoUnit.SECONDS.between(LocalDateTime.now(), expiredAt);
+        if (remainingSeconds <= 0) {
+            throw new BadRequestException("Đơn hàng đã hết hạn. Vui lòng tạo đơn mới.");
+        }
+
+        paymentRepository.findFirstByOrderIdAndStatusOrderByCreatedAtDesc(order.getId(), PaymentStatus.PENDING)
+                .ifPresent(p -> {
+                    p.setStatus(PaymentStatus.CANCELLED);
+                    paymentRepository.save(p);
+                });
+
+        String ipAddress = vnPayService.getIpAddress(httpRequest);
+        String txnRef = buildVnpTxnRef(order.getOrderCode(), order.getId());
+
+        Payment newPayment = Payment.builder()
+                .order(order)
+                .paymentMethod(PaymentMethod.VNPAY)
+                .status(PaymentStatus.PENDING)
+                .amount(order.getTotalAmount())
+                .vnpTxnRef(txnRef)
+                .ipAddress(ipAddress)
+                .build();
+        paymentRepository.save(newPayment);
+
+        String paymentUrl = vnPayService.createPaymentUrl(
+                txnRef,
+                order.getTotalAmount(),
+                "Thanh toan ve su kien: " + order.getEvent().getTitle(),
+                ipAddress
+        );
+
+        return PaymentDTO.builder()
+                .orderCode(order.getOrderCode())
+                .orderId(order.getId())
+                .amount(order.getTotalAmount())
+                .currency(order.getCurrency())
+                .status(PaymentStatus.PENDING)
+                .paymentMethod(PaymentMethod.VNPAY)
+                .paymentUrl(paymentUrl)
+                .expiredAt(expiredAt)
+                .remainingSeconds((int) remainingSeconds)
+                .message("Payment URL generated successfully")
+                .build();
     }
 
     public OrderDTO getOrderById(Long orderId) {
@@ -423,6 +527,12 @@ public class OrderService {
 
         order.setPaymentStatus(PaymentStatus.CANCELLED);
 
+        paymentRepository.findFirstByOrderIdAndStatusOrderByCreatedAtDesc(order.getId(), PaymentStatus.PENDING)
+                .ifPresent(p -> {
+                    p.setStatus(PaymentStatus.CANCELLED);
+                    paymentRepository.save(p);
+                });
+
         List<Ticket> tickets = ticketRepository.findByOrderId(order.getId());
         for (Ticket ticket : tickets) {
             ticket.setStatus(TicketStatus.CANCELLED);
@@ -464,6 +574,12 @@ public class OrderService {
                 try {
                     order.setPaymentStatus(PaymentStatus.EXPIRED);
 
+                    paymentRepository.findFirstByOrderIdAndStatusOrderByCreatedAtDesc(order.getId(), PaymentStatus.PENDING)
+                            .ifPresent(p -> {
+                                p.setStatus(PaymentStatus.EXPIRED);
+                                paymentRepository.save(p);
+                            });
+
                     List<Ticket> tickets = ticketRepository.findByOrderId(order.getId());
                     for (Ticket ticket : tickets) {
                         ticket.setStatus(TicketStatus.CANCELLED);
@@ -496,6 +612,11 @@ public class OrderService {
 
     private String generateOrderCode() {
         return "TG" + System.currentTimeMillis() + UUID.randomUUID().toString().substring(0, 4).toUpperCase();
+    }
+
+    private String buildVnpTxnRef(String orderCode, Long orderId) {
+        long attempt = paymentRepository.countByOrderId(orderId) + 1;
+        return orderCode + "-" + attempt;
     }
 
     private String generateTicketCode() {
@@ -534,6 +655,11 @@ public class OrderService {
 
         TicketZone zone = tickets.isEmpty() ? null : tickets.get(0).getTicketZone();
 
+        Payment payment = order.getSuccessfulPayment();
+        if (payment == null) {
+            payment = order.getLatestPayment();
+        }
+
         return OrderDTO.builder()
                 .id(order.getId())
                 .orderCode(order.getOrderCode())
@@ -551,10 +677,10 @@ public class OrderService {
                 .unitPrice(zone != null ? zone.getPrice() : null)
                 .totalAmount(order.getTotalAmount())
                 .currency(order.getCurrency())
-                .paymentMethod(order.getPaymentMethod())
+                .paymentMethod(payment != null ? payment.getPaymentMethod() : null)
                 .paymentStatus(order.getPaymentStatus())
-                .paymentTransactionId(order.getPaymentTransactionId())
-                .paidAt(order.getPaidAt())
+                .paymentTransactionId(payment != null ? payment.getTransactionId() : null)
+                .paidAt(payment != null ? payment.getPaidAt() : null)
                 .buyerName(order.getBuyerName())
                 .buyerEmail(order.getBuyerEmail())
                 .buyerPhone(order.getBuyerPhone())

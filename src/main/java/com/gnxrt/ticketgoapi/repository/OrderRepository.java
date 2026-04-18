@@ -38,19 +38,17 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     @Query("SELECT COALESCE(SUM(o.totalAmount), 0) FROM Order o WHERE o.event.id = :eventId AND o.paymentStatus = 'COMPLETED'")
     BigDecimal getTotalRevenueByEventId(@Param("eventId") Long eventId);
 
-    @Query("SELECT COALESCE(SUM(o.totalAmount), 0) FROM Order o WHERE o.paymentStatus = 'COMPLETED' AND o.paidAt BETWEEN :startDate AND :endDate")
+    @Query("SELECT COALESCE(SUM(o.totalAmount), 0) FROM Order o JOIN o.payments p WHERE p.status = 'COMPLETED' AND p.paidAt BETWEEN :startDate AND :endDate")
     BigDecimal getTotalRevenueBetweenDates(@Param("startDate") LocalDateTime startDate, @Param("endDate") LocalDateTime endDate);
 
-    @Query("SELECT COUNT(o) FROM Order o WHERE o.paymentStatus = 'COMPLETED' AND o.paidAt BETWEEN :startDate AND :endDate")
+    @Query("SELECT COUNT(o) FROM Order o JOIN o.payments p WHERE p.status = 'COMPLETED' AND p.paidAt BETWEEN :startDate AND :endDate")
     Long countCompletedOrdersBetweenDates(@Param("startDate") LocalDateTime startDate, @Param("endDate") LocalDateTime endDate);
 
     List<Order> findTop10ByPaymentStatusOrderByCreatedAtDesc(PaymentStatus status);
 
-    Optional<Order> findByPaymentTransactionId(String transactionId);
-
-    @Query("SELECT DATE(o.paidAt) as date, SUM(o.totalAmount) as revenue, COUNT(o) as orderCount " +
-            "FROM Order o WHERE o.paymentStatus = 'COMPLETED' AND o.paidAt BETWEEN :startDate AND :endDate " +
-            "GROUP BY DATE(o.paidAt) ORDER BY DATE(o.paidAt)")
+    @Query("SELECT DATE(p.paidAt) as date, SUM(o.totalAmount) as revenue, COUNT(o) as orderCount " +
+            "FROM Order o JOIN o.payments p WHERE p.status = 'COMPLETED' AND p.paidAt BETWEEN :startDate AND :endDate " +
+            "GROUP BY DATE(p.paidAt) ORDER BY DATE(p.paidAt)")
     List<Object[]> getDailyRevenueStats(@Param("startDate") LocalDateTime startDate, @Param("endDate") LocalDateTime endDate);
 
     boolean existsByUserIdAndEventIdAndPaymentStatus(Long userId, Long eventId, PaymentStatus status);
@@ -60,7 +58,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     @Query("SELECT COALESCE(SUM(o.totalAmount), 0) FROM Order o WHERE o.paymentStatus = 'COMPLETED'")
     BigDecimal getTotalRevenue();
 
-    @Query("SELECT COALESCE(SUM(o.totalAmount), 0) FROM Order o WHERE o.paymentStatus = 'COMPLETED' AND o.paidAt BETWEEN :start AND :end")
+    @Query("SELECT COALESCE(SUM(o.totalAmount), 0) FROM Order o JOIN o.payments p WHERE p.status = 'COMPLETED' AND p.paidAt BETWEEN :start AND :end")
     BigDecimal getRevenueBetween(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
 
     @Query("SELECT COALESCE(AVG(o.totalAmount), 0) FROM Order o WHERE o.paymentStatus = 'COMPLETED'")
@@ -74,9 +72,9 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     @Query("SELECT o FROM Order o ORDER BY o.createdAt DESC")
     List<Order> findRecentOrders(Pageable pageable);
 
-    @Query("SELECT CAST(o.paidAt AS DATE), SUM(o.totalAmount) " +
-            "FROM Order o WHERE o.paymentStatus = 'COMPLETED' AND o.paidAt BETWEEN :start AND :end " +
-            "GROUP BY CAST(o.paidAt AS DATE) ORDER BY CAST(o.paidAt AS DATE)")
+    @Query("SELECT CAST(p.paidAt AS DATE), SUM(o.totalAmount) " +
+            "FROM Order o JOIN o.payments p WHERE p.status = 'COMPLETED' AND p.paidAt BETWEEN :start AND :end " +
+            "GROUP BY CAST(p.paidAt AS DATE) ORDER BY CAST(p.paidAt AS DATE)")
     List<Object[]> getRevenueTrendByDay(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
 
     @Query("SELECT o.event.category.name, SUM(o.totalAmount) " +

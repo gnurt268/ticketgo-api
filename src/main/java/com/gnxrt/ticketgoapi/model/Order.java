@@ -1,6 +1,5 @@
 package com.gnxrt.ticketgoapi.model;
 
-import com.gnxrt.ticketgoapi.enums.PaymentMethod;
 import com.gnxrt.ticketgoapi.enums.PaymentStatus;
 import jakarta.persistence.*;
 import lombok.*;
@@ -10,6 +9,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 @Entity
@@ -53,20 +53,9 @@ public class Order {
     private Integer quantity;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "payment_method", length = 20)
-    @Builder.Default
-    private PaymentMethod paymentMethod = PaymentMethod.VNPAY;
-
-    @Enumerated(EnumType.STRING)
     @Column(name = "payment_status", nullable = false, length = 20)
     @Builder.Default
     private PaymentStatus paymentStatus = PaymentStatus.PENDING;
-
-    @Column(name = "payment_transaction_id", length = 255)
-    private String paymentTransactionId;
-
-    @Column(name = "paid_at")
-    private LocalDateTime paidAt;
 
     @Column(name = "buyer_name", nullable = false, length = 255)
     private String buyerName;
@@ -80,12 +69,6 @@ public class Order {
     @Column(columnDefinition = "TEXT")
     private String notes;
 
-    @Column(name = "ip_address", length = 45)
-    private String ipAddress;
-
-    @Column(name = "user_agent", columnDefinition = "TEXT")
-    private String userAgent;
-
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -98,21 +81,20 @@ public class Order {
     @Builder.Default
     private List<Ticket> tickets = new ArrayList<>();
 
-    public boolean isPaid() {
-        return this.paymentStatus == PaymentStatus.COMPLETED;
+    @OneToMany(mappedBy = "order", cascade = CascadeType.ALL)
+    @Builder.Default
+    private List<Payment> payments = new ArrayList<>();
+
+    public Payment getLatestPayment() {
+        return payments.stream()
+                .max(Comparator.comparing(Payment::getCreatedAt))
+                .orElse(null);
     }
 
-    public void markAsPaid(String transactionId) {
-        this.paymentStatus = PaymentStatus.COMPLETED;
-        this.paymentTransactionId = transactionId;
-        this.paidAt = LocalDateTime.now();
-    }
-
-    public void markAsFailed() {
-        this.paymentStatus = PaymentStatus.FAILED;
-    }
-
-    public void cancel() {
-        this.paymentStatus = PaymentStatus.CANCELLED;
+    public Payment getSuccessfulPayment() {
+        return payments.stream()
+                .filter(p -> p.getStatus() == PaymentStatus.COMPLETED)
+                .findFirst()
+                .orElse(null);
     }
 }
