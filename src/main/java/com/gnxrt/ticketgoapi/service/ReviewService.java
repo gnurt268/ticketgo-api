@@ -2,6 +2,7 @@ package com.gnxrt.ticketgoapi.service;
 
 import com.gnxrt.ticketgoapi.dto.request.review.CreateReviewRequest;
 import com.gnxrt.ticketgoapi.dto.response.review.EventReviewSummaryDTO;
+import com.gnxrt.ticketgoapi.dto.response.review.MyReviewDTO;
 import com.gnxrt.ticketgoapi.dto.response.review.ReviewDTO;
 import com.gnxrt.ticketgoapi.enums.EventStatus;
 import com.gnxrt.ticketgoapi.enums.PaymentStatus;
@@ -107,6 +108,29 @@ public class ReviewService {
     public Page<ReviewDTO> getEventReviews(Long eventId, Pageable pageable) {
         Page<Review> reviews = reviewRepository.findByEventIdAndIsApprovedTrueOrderByCreatedAtDesc(eventId, pageable);
         return reviews.map(this::mapToDTO);
+    }
+
+    public Page<MyReviewDTO> getMyReviews(Long userId, Pageable pageable) {
+        Page<Review> reviews = reviewRepository.findByUserIdOrderByCreatedAtDesc(userId, pageable);
+        return reviews.map(this::mapToMyReviewDTO);
+    }
+
+    private MyReviewDTO mapToMyReviewDTO(Review review) {
+        Event event = review.getEvent();
+        return MyReviewDTO.builder()
+                .id(review.getId())
+                .rating(review.getRating())
+                .title(review.getTitle())
+                .comment(review.getComment())
+                .isApproved(review.getIsApproved())
+                .createdAt(review.getCreatedAt())
+                .updatedAt(review.getUpdatedAt())
+                .eventId(event.getId())
+                .eventTitle(event.getTitle())
+                .eventSlug(event.getSlug())
+                .eventPosterUrl(event.getPosterUrl())
+                .eventStartDate(event.getStartDate())
+                .build();
     }
 
     @Transactional
