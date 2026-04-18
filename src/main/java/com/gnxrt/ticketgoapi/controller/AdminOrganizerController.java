@@ -3,7 +3,9 @@ package com.gnxrt.ticketgoapi.controller;
 import com.gnxrt.ticketgoapi.dto.request.organizer.OrganizerRequestReviewRequest;
 import com.gnxrt.ticketgoapi.dto.response.organizer.OrganizerRequestDTO;
 import com.gnxrt.ticketgoapi.enums.OrganizerRequestStatus;
+import com.gnxrt.ticketgoapi.exception.ResourceNotFoundException;
 import com.gnxrt.ticketgoapi.model.User;
+import com.gnxrt.ticketgoapi.repository.UserRepository;
 import com.gnxrt.ticketgoapi.service.OrganizerRequestService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -13,7 +15,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -28,6 +30,7 @@ import java.util.Map;
 public class AdminOrganizerController {
 
     private final OrganizerRequestService organizerRequestService;
+    private final UserRepository userRepository;
 
     /**
      * GET /api/admin/organizer-requests
@@ -78,9 +81,11 @@ public class AdminOrganizerController {
     @PostMapping("/{id}/review")
     public ResponseEntity<OrganizerRequestDTO> reviewRequest(
             @PathVariable Long id,
-            @Valid @RequestBody OrganizerRequestReviewRequest request,
-            @AuthenticationPrincipal User admin
+            @Valid @RequestBody OrganizerRequestReviewRequest request
     ) {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        User admin = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "email", email));
         OrganizerRequestDTO result = organizerRequestService.reviewRequest(id, admin.getId(), request);
         return ResponseEntity.ok(result);
     }

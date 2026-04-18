@@ -2,13 +2,21 @@ package com.gnxrt.ticketgoapi.controller;
 
 import com.gnxrt.ticketgoapi.dto.request.event.EventRequest;
 import com.gnxrt.ticketgoapi.dto.response.event.EventDetailDTO;
+import com.gnxrt.ticketgoapi.dto.response.event.EventListDTO;
+import com.gnxrt.ticketgoapi.enums.EventStatus;
 import com.gnxrt.ticketgoapi.service.EventManagementService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/organizer/events")
@@ -17,6 +25,36 @@ import org.springframework.web.bind.annotation.*;
 public class OrganizerEventController {
 
     private final EventManagementService eventManagementService;
+
+    /**
+     * ORGANIZER
+     * GET /api/organizer/events
+     */
+    @GetMapping
+    public ResponseEntity<Page<EventListDTO>> getMyEvents(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "createdAt") String sortBy,
+            @RequestParam(defaultValue = "desc") String sortDirection,
+            @RequestParam(required = false) EventStatus status,
+            @RequestParam(required = false) String keyword
+    ) {
+        Sort sort = sortDirection.equalsIgnoreCase("asc")
+                ? Sort.by(sortBy).ascending()
+                : Sort.by(sortBy).descending();
+        Pageable pageable = PageRequest.of(page, size, sort);
+        Page<EventListDTO> events = eventManagementService.getMyEvents(status, keyword, pageable);
+        return ResponseEntity.ok(events);
+    }
+
+    /**
+     * ORGANIZER
+     * GET /api/organizer/events/statistics
+     */
+    @GetMapping("/statistics")
+    public ResponseEntity<Map<String, Object>> getMyStatistics() {
+        return ResponseEntity.ok(eventManagementService.getMyEventStatistics());
+    }
 
     /**
      * ORGANIZER
