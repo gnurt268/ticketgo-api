@@ -28,8 +28,11 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Service
@@ -67,6 +70,65 @@ public class EventManagementService {
         }
 
         return events.map(this::mapToListDTO);
+    }
+
+    public Page<EventListDTO> getMyEvents(EventStatus status, String keyword, Pageable pageable) {
+        User organizer = getCurrentUser();
+        log.info("Getting events of organizer id: {}", organizer.getId());
+
+        Page<Event> events = eventRepository.findByFilters(
+                status, null, organizer.getId(), null, null, null, null, pageable
+        );
+
+        if (keyword != null && !keyword.trim().isEmpty()) {
+            String lowered = keyword.toLowerCase();
+            List<Event> filtered = events.getContent().stream()
+                    .filter(e -> (e.getTitle() != null && e.getTitle().toLowerCase().contains(lowered))
+                            || (e.getVenue() != null && e.getVenue().toLowerCase().contains(lowered))
+                            || (e.getCity() != null && e.getCity().toLowerCase().contains(lowered)))
+                    .toList();
+            return new org.springframework.data.domain.PageImpl<>(
+                    filtered.stream().map(this::mapToListDTO).toList(),
+                    pageable,
+                    filtered.size()
+            );
+        }
+
+        return events.map(this::mapToListDTO);
+    }
+
+    public Map<String, Object> getMyEventStatistics() {
+        User organizer = getCurrentUser();
+        Long organizerId = organizer.getId();
+        log.info("Getting statistics for organizer id: {}", organizerId);
+
+        Map<String, Object> stats = new HashMap<>();
+
+        long total = 0L;
+        int totalTicketsSold = 0;
+        BigDecimal totalRevenue = BigDecimal.ZERO;
+        Map<String, Long> byStatus = new HashMap<>();
+
+        for (EventStatus s : EventStatus.values()) {
+            List<Event> events = eventRepository.findByOrganizerIdAndStatusIn(organizerId, List.of(s));
+            byStatus.put(s.name(), (long) events.size());
+            total += events.size();
+            for (Event e : events) {
+                if (e.getTotalTicketsSold() != null) {
+                    totalTicketsSold += e.getTotalTicketsSold();
+                }
+                if (e.getTotalRevenue() != null) {
+                    totalRevenue = totalRevenue.add(e.getTotalRevenue());
+                }
+            }
+        }
+
+        stats.put("totalEvents", total);
+        stats.put("byStatus", byStatus);
+        stats.put("totalTicketsSold", totalTicketsSold);
+        stats.put("totalRevenue", totalRevenue);
+
+        return stats;
     }
 
     public Page<EventListDTO> getPendingEvents(Pageable pageable) {

@@ -64,10 +64,17 @@ spring:
   # File upload
   servlet:
     multipart:
-      max-file-size: ${MAX_FILE_SIZE:}
-      max-request-size: ${MAX_FILE_SIZE:}
+      max-file-size: ${MAX_FILE_SIZE:10MB}
+      max-request-size: ${MAX_FILE_SIZE:10MB}
   config:
     import: optional:file:env.properties
+
+# Cloudinary
+cloudinary:
+  cloud-name: ${CLOUDINARY_CLOUD_NAME:}
+  api-key: ${CLOUDINARY_API_KEY:}
+  api-secret: ${CLOUDINARY_API_SECRET:}
+  folder: ${CLOUDINARY_FOLDER:ticketgo/avatars}
 
 # JWT
 jwt:
