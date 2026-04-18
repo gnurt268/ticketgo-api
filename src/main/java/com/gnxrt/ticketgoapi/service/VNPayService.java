@@ -1,11 +1,17 @@
 package com.gnxrt.ticketgoapi.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.gnxrt.ticketgoapi.config.VNPayConfig;
 import com.gnxrt.ticketgoapi.dto.response.payment.VNPayCallbackDTO;
+import com.gnxrt.ticketgoapi.model.Payment;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -13,6 +19,7 @@ import java.math.BigDecimal;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
+import java.time.ZoneId;
 import java.util.*;
 
 @Slf4j
@@ -21,14 +28,17 @@ import java.util.*;
 public class VNPayService {
 
     private final VNPayConfig vnPayConfig;
+    private final RestTemplate restTemplate;
 
     private static final String HMAC_SHA512 = "HmacSHA512";
+    private static final String VNP_TIMEZONE = "Etc/GMT+7";
+    private static final String RECONCILE_IP = "127.0.0.1";
 
     /**
      * Tạo URL thanh toán VNPay
      */
-    public String createPaymentUrl(String orderCode, BigDecimal amount, String description, String ipAddress) {
-        log.info("Creating VNPay payment URL for order: {}, amount: {}", orderCode, amount);
+    public String createPaymentUrl(String txnRef, BigDecimal amount, String description, String ipAddress) {
+        log.info("Creating VNPay payment URL for txnRef: {}, amount: {}", txnRef, amount);
 
         Map<String, String> vnpParams = new TreeMap<>();
 
@@ -37,7 +47,7 @@ public class VNPayService {
         vnpParams.put("vnp_TmnCode", vnPayConfig.getTmnCode());
         vnpParams.put("vnp_Amount", String.valueOf(amount.multiply(new BigDecimal("100")).longValue()));
         vnpParams.put("vnp_CurrCode", vnPayConfig.getCurrencyCode());
-        vnpParams.put("vnp_TxnRef", orderCode);
+        vnpParams.put("vnp_TxnRef", txnRef);
         vnpParams.put("vnp_OrderInfo", description);
         vnpParams.put("vnp_OrderType", vnPayConfig.getOrderType());
         vnpParams.put("vnp_Locale", vnPayConfig.getLocale());
@@ -77,7 +87,7 @@ public class VNPayService {
         query += "&vnp_SecureHash=" + secureHash;
 
         String paymentUrl = vnPayConfig.getPayUrl() + "?" + query;
-        log.info("Created VNPay payment URL for order: {}", orderCode);
+        log.info("Created VNPay payment URL for txnRef: {}", txnRef);
 
         return paymentUrl;
     }
@@ -186,6 +196,102 @@ public class VNPayService {
         }
 
         return ipAddress;
+    }
+
+    /**
+     * Gọi VNPay querydr để truy vấn trạng thái giao dịch.
+     * Trả về VNPayCallbackDTO nếu query thành công (vnp_ResponseCode = "00"),
+     * Optional.empty() nếu VNPay không có dữ liệu giao dịch hoặc query fail — caller nên giữ Payment ở PENDING.
+     */
+    public Optional<VNPayCallbackDTO> queryTransaction(Payment payment) {
+        String vnpTxnRef = payment.getVnpTxnRef();
+        log.info("Querying VNPay transaction status: vnpTxnRef={}", vnpTxnRef);
+
+        SimpleDateFormat formatter = new SimpleDateFormat("yyyyMMddHHmmss");
+        formatter.setTimeZone(TimeZone.getTimeZone(VNP_TIMEZONE));
+
+        String requestId = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+        String version = vnPayConfig.getVersion();
+        String command = "querydr";
+        String tmnCode = vnPayConfig.getTmnCode();
+        String orderInfo = "Query transaction " + vnpTxnRef;
+        Date createdAtDate = Date.from(payment.getCreatedAt().atZone(ZoneId.systemDefault()).toInstant());
+        String transactionDate = formatter.format(createdAtDate);
+        String createDate = formatter.format(new Date());
+        String ipAddr = payment.getIpAddress() != null ? payment.getIpAddress() : RECONCILE_IP;
+
+        String hashData = String.join("|",
+                requestId, version, command, tmnCode, vnpTxnRef,
+                transactionDate, createDate, ipAddr, orderInfo);
+        String secureHash = hmacSHA512(vnPayConfig.getHashSecret(), hashData);
+
+        Map<String, String> body = new LinkedHashMap<>();
+        body.put("vnp_RequestId", requestId);
+        body.put("vnp_Version", version);
+        body.put("vnp_Command", command);
+        body.put("vnp_TmnCode", tmnCode);
+        body.put("vnp_TxnRef", vnpTxnRef);
+        body.put("vnp_OrderInfo", orderInfo);
+        body.put("vnp_TransactionDate", transactionDate);
+        body.put("vnp_CreateDate", createDate);
+        body.put("vnp_IpAddr", ipAddr);
+        body.put("vnp_SecureHash", secureHash);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        JsonNode response;
+        try {
+            response = restTemplate.postForObject(
+                    vnPayConfig.getApiUrl(),
+                    new HttpEntity<>(body, headers),
+                    JsonNode.class
+            );
+        } catch (Exception e) {
+            log.error("VNPay querydr call failed: vnpTxnRef={}", vnpTxnRef, e);
+            return Optional.empty();
+        }
+
+        if (response == null) {
+            log.warn("VNPay querydr empty response: vnpTxnRef={}", vnpTxnRef);
+            return Optional.empty();
+        }
+
+        String responseCode = textOrNull(response, "vnp_ResponseCode");
+        if (!"00".equals(responseCode)) {
+            log.warn("VNPay querydr not OK: vnpTxnRef={}, responseCode={}, message={}",
+                    vnpTxnRef, responseCode, textOrNull(response, "vnp_Message"));
+            return Optional.empty();
+        }
+
+        String returnedTxnRef = textOrNull(response, "vnp_TxnRef");
+        if (!vnpTxnRef.equals(returnedTxnRef)) {
+            log.error("VNPay querydr txnRef mismatch: sent={}, received={}", vnpTxnRef, returnedTxnRef);
+            return Optional.empty();
+        }
+
+        VNPayCallbackDTO dto = VNPayCallbackDTO.builder()
+                .vnpTmnCode(textOrNull(response, "vnp_TmnCode"))
+                .vnpAmount(textOrNull(response, "vnp_Amount"))
+                .vnpBankCode(textOrNull(response, "vnp_BankCode"))
+                .vnpBankTranNo(textOrNull(response, "vnp_BankTranNo"))
+                .vnpCardType(textOrNull(response, "vnp_CardType"))
+                .vnpPayDate(textOrNull(response, "vnp_PayDate"))
+                .vnpOrderInfo(textOrNull(response, "vnp_OrderInfo"))
+                .vnpTransactionNo(textOrNull(response, "vnp_TransactionNo"))
+                .vnpResponseCode(textOrNull(response, "vnp_TransactionStatus"))
+                .vnpTransactionStatus(textOrNull(response, "vnp_TransactionStatus"))
+                .vnpTxnRef(returnedTxnRef)
+                .build();
+
+        log.info("VNPay querydr success: vnpTxnRef={}, transactionStatus={}",
+                vnpTxnRef, dto.getVnpTransactionStatus());
+        return Optional.of(dto);
+    }
+
+    private String textOrNull(JsonNode node, String field) {
+        JsonNode value = node.get(field);
+        return value == null || value.isNull() ? null : value.asText();
     }
 
     /**
