@@ -36,6 +36,7 @@ public class WaitingRoomService {
     private final QueueEntryRepository queueEntryRepository;
     private final EventRepository eventRepository;
     private final WaitingRoomRedisService redisService;
+    private final BotDetectionService botDetectionService;
 
     /**
      * Tạo waiting room cho event
@@ -177,6 +178,20 @@ public class WaitingRoomService {
         }
 
         String fingerprint = joinRequest != null ? joinRequest.getFingerprint() : null;
+
+        long timeSinceOpen = waitingRoom.getPreQueueStart() != null
+                ? Math.max(0, Duration.between(waitingRoom.getPreQueueStart(), now).getSeconds())
+                : 0;
+
+        boolean isBot = botDetectionService.isBot(
+                fingerprint, request.getHeader("User-Agent"), getClientIp(request),
+                true, timeSinceOpen, 0.0
+        );
+
+        if (isBot) {
+            log.warn("Bot detected for fingerprint: {}, event: {}", fingerprint, eventId);
+            throw new BadRequestException("Hành vi của bạn bị phát hiện là bất thường. Vui lòng thử lại sau.");
+        }
 
         String visitorToken = generateVisitorToken();
 

@@ -1,5 +1,6 @@
 package com.gnxrt.ticketgoapi.service;
 
+import com.gnxrt.ticketgoapi.config.CacheConfig;
 import com.gnxrt.ticketgoapi.dto.response.event.EventSummaryDTO;
 import com.gnxrt.ticketgoapi.dto.response.event.PublicEventDetailDTO;
 import com.gnxrt.ticketgoapi.enums.EventStatus;
@@ -14,7 +15,9 @@ import com.gnxrt.ticketgoapi.repository.ReviewRepository;
 import com.gnxrt.ticketgoapi.repository.TicketZoneRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -22,7 +25,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -36,44 +41,37 @@ public class EventService {
 
     public Page<EventSummaryDTO> getPublishedEvents(Pageable pageable) {
         log.info("Getting published events");
-        return eventRepository.findUpcomingPublishedEvents(LocalDateTime.now(), pageable)
-                .map(this::mapToSummaryDTO);
+        return mapPageBatch(eventRepository.findUpcomingPublishedEvents(LocalDateTime.now(), pageable));
     }
 
     public Page<EventSummaryDTO> getEventsByCategory(Long categoryId, Pageable pageable) {
         log.info("Getting events by category: {}", categoryId);
-        return eventRepository.findUpcomingPublishedEventsByCategory(categoryId, LocalDateTime.now(), pageable)
-                .map(this::mapToSummaryDTO);
+        return mapPageBatch(eventRepository.findUpcomingPublishedEventsByCategory(categoryId, LocalDateTime.now(), pageable));
     }
 
     public Page<EventSummaryDTO> getEventsByCity(String city, Pageable pageable) {
         log.info("Getting events by city: {}", city);
-        return eventRepository.findEventsByCity(city, LocalDateTime.now(), pageable)
-                .map(this::mapToSummaryDTO);
+        return mapPageBatch(eventRepository.findEventsByCity(city, LocalDateTime.now(), pageable));
     }
 
     public Page<EventSummaryDTO> searchEvents(String keyword, Pageable pageable) {
         log.info("Searching events with keyword: {}", keyword);
-        return eventRepository.searchPublishedEvents(keyword, LocalDateTime.now(), pageable)
-                .map(this::mapToSummaryDTO);
+        return mapPageBatch(eventRepository.searchPublishedEvents(keyword, LocalDateTime.now(), pageable));
     }
 
     public Page<EventSummaryDTO> getFeaturedEvents(Pageable pageable) {
         log.info("Getting featured events");
-        return eventRepository.findFeaturedEvents(LocalDateTime.now(), pageable)
-                .map(this::mapToSummaryDTO);
+        return mapPageBatch(eventRepository.findFeaturedEvents(LocalDateTime.now(), pageable));
     }
 
     public Page<EventSummaryDTO> getTopSellingEvents(Pageable pageable) {
         log.info("Getting top selling events");
-        return eventRepository.findTopSellingEvents(pageable)
-                .map(this::mapToSummaryDTO);
+        return mapPageBatch(eventRepository.findTopSellingEvents(pageable));
     }
 
     public Page<EventSummaryDTO> getMostViewedEvents(Pageable pageable) {
         log.info("Getting most viewed events");
-        return eventRepository.findMostViewedEvents(pageable)
-                .map(this::mapToSummaryDTO);
+        return mapPageBatch(eventRepository.findMostViewedEvents(pageable));
     }
 
     public Page<EventSummaryDTO> searchAndFilterEvents(
@@ -89,8 +87,7 @@ public class EventService {
         log.info("Searching and filtering events - keyword: {}, categoryId: {}, city: {}", keyword, categoryId, city);
 
         if (keyword != null && !keyword.trim().isEmpty()) {
-            return eventRepository.searchPublishedEvents(keyword, LocalDateTime.now(), pageable)
-                    .map(this::mapToSummaryDTO);
+            return mapPageBatch(eventRepository.searchPublishedEvents(keyword, LocalDateTime.now(), pageable));
         }
 
         Page<Event> events = eventRepository.findByFilters(
@@ -104,10 +101,11 @@ public class EventService {
                 pageable
         );
 
-        return events.map(this::mapToSummaryDTO);
+        return mapPageBatch(events);
     }
 
     @Transactional
+    @Cacheable(value = CacheConfig.CACHE_EVENT_DETAIL, key = "#eventId")
     public PublicEventDetailDTO getEventDetail(Long eventId) {
         log.info("Getting event detail for id: {}", eventId);
 
@@ -125,13 +123,17 @@ public class EventService {
     }
 
     @Transactional
+    @Cacheable(value = CacheConfig.CACHE_EVENT_DETAIL_SLUG, key = "#slug")
     public PublicEventDetailDTO getEventDetailBySlug(String slug) {
         log.info("Getting event detail for slug: {}", slug);
 
         Event event = eventRepository.findBySlug(slug)
                 .orElseThrow(() -> new ResourceNotFoundException("Event", "slug", slug));
 
-        if (event.getStatus() != EventStatus.PUBLISHED) {
+        EventStatus status = event.getStatus();
+        if (status != EventStatus.PUBLISHED
+                && status != EventStatus.COMPLETED
+                && status != EventStatus.CANCELLED) {
             throw new BadRequestException("Sự kiện không khả dụng");
         }
 
@@ -154,11 +156,11 @@ public class EventService {
                 pageable
         );
 
-        return relatedEvents.getContent().stream()
+        List<Event> filtered = relatedEvents.getContent().stream()
                 .filter(e -> !e.getId().equals(eventId))
                 .limit(limit)
-                .map(this::mapToSummaryDTO)
                 .collect(Collectors.toList());
+        return mapEventsBatch(filtered);
     }
 
     public List<String> getAvailableCities() {
@@ -166,44 +168,80 @@ public class EventService {
         return eventRepository.findDistinctCitiesOfPublishedEvents(LocalDateTime.now());
     }
 
-    private EventSummaryDTO mapToSummaryDTO(Event event) {
-        BigDecimal minPrice = ticketZoneRepository.findMinPriceByEventId(event.getId());
-        BigDecimal maxPrice = ticketZoneRepository.findMaxPriceByEventId(event.getId());
-
-        Integer totalCapacity = ticketZoneRepository.getTotalCapacityByEventId(event.getId());
-        Integer availableCapacity = ticketZoneRepository.getAvailableCapacityByEventId(event.getId());
-
-        Double averageRating = reviewRepository.getAverageRatingByEventId(event.getId());
-        Long totalReviews = reviewRepository.countByEventIdAndIsApprovedTrue(event.getId());
-
-        return EventSummaryDTO.builder()
-                .id(event.getId())
-                .title(event.getTitle())
-                .slug(event.getSlug())
-                .posterUrl(event.getPosterUrl())
-                .location(event.getLocation())
-                .venue(event.getVenue())
-                .city(event.getCity())
-                .startDate(event.getStartDate())
-                .endDate(event.getEndDate())
-                .eventType(event.getEventType())
-                .isFeatured(event.getIsFeatured())
-                .viewCount(event.getViewCount())
-                .categoryId(event.getCategory().getId())
-                .categoryName(event.getCategory().getName())
-                .categorySlug(event.getCategory().getSlug())
-                .organizerId(event.getOrganizer().getId())
-                .organizerName(event.getOrganizer().getFullName())
-                .minPrice(minPrice)
-                .maxPrice(maxPrice)
-                .currency("VND")
-                .totalCapacity(totalCapacity != null ? totalCapacity : 0)
-                .availableCapacity(availableCapacity != null ? availableCapacity : 0)
-                .isSoldOut(availableCapacity != null && availableCapacity == 0)
-                .averageRating(averageRating != null ? averageRating : 0.0)
-                .totalReviews(totalReviews != null ? totalReviews.intValue() : 0)
-                .build();
+    private Page<EventSummaryDTO> mapPageBatch(Page<Event> page) {
+        List<EventSummaryDTO> dtos = mapEventsBatch(page.getContent());
+        return new PageImpl<>(dtos, page.getPageable(), page.getTotalElements());
     }
+
+    private List<EventSummaryDTO> mapEventsBatch(List<Event> events) {
+        if (events.isEmpty()) {
+            return List.of();
+        }
+
+        List<Long> ids = events.stream().map(Event::getId).collect(Collectors.toList());
+
+        Map<Long, ZoneStats> zoneStats = new HashMap<>();
+        for (Object[] row : ticketZoneRepository.findStatsByEventIds(ids)) {
+            Long eid = (Long) row[0];
+            zoneStats.put(eid, new ZoneStats(
+                    (BigDecimal) row[1],
+                    (BigDecimal) row[2],
+                    ((Number) row[3]).intValue(),
+                    ((Number) row[4]).intValue()
+            ));
+        }
+
+        Map<Long, ReviewStats> reviewStats = new HashMap<>();
+        for (Object[] row : reviewRepository.findStatsByEventIds(ids)) {
+            Long eid = (Long) row[0];
+            reviewStats.put(eid, new ReviewStats(
+                    row[1] != null ? ((Number) row[1]).doubleValue() : 0.0,
+                    ((Number) row[2]).longValue()
+            ));
+        }
+
+        ZoneStats emptyZone = new ZoneStats(null, null, 0, 0);
+        ReviewStats emptyReview = new ReviewStats(0.0, 0L);
+
+        return events.stream()
+                .map(event -> {
+                    ZoneStats zs = zoneStats.getOrDefault(event.getId(), emptyZone);
+                    ReviewStats rs = reviewStats.getOrDefault(event.getId(), emptyReview);
+                    return EventSummaryDTO.builder()
+                            .id(event.getId())
+                            .title(event.getTitle())
+                            .slug(event.getSlug())
+                            .posterUrl(event.getPosterUrl())
+                            .location(event.getLocation())
+                            .venue(event.getVenue())
+                            .city(event.getCity())
+                            .startDate(event.getStartDate())
+                            .endDate(event.getEndDate())
+                            .eventType(event.getEventType())
+                            .isFeatured(event.getIsFeatured())
+                            .viewCount(event.getViewCount())
+                            .categoryId(event.getCategory().getId())
+                            .categoryName(event.getCategory().getName())
+                            .categorySlug(event.getCategory().getSlug())
+                            .organizerId(event.getOrganizer().getId())
+                            .organizerName(event.getOrganizer().getFullName())
+                            .minPrice(zs.minPrice())
+                            .maxPrice(zs.maxPrice())
+                            .currency("VND")
+                            .totalCapacity(zs.totalCapacity())
+                            .availableCapacity(zs.availableCapacity())
+                            .isSoldOut(zs.availableCapacity() == 0)
+                            .averageRating(rs.average())
+                            .totalReviews((int) rs.count())
+                            .build();
+                })
+                .collect(Collectors.toList());
+    }
+
+    private record ZoneStats(BigDecimal minPrice, BigDecimal maxPrice,
+                             int totalCapacity, int availableCapacity) {}
+
+    private record ReviewStats(double average, long count) {}
 
     private PublicEventDetailDTO mapToDetailDTO(Event event) {
         List<TicketZone> ticketZones = ticketZoneRepository.findByEventIdAndIsActiveTrueOrderByDisplayOrderAsc(event.getId());
