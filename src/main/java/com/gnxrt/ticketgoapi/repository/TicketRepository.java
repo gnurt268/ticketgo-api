@@ -61,6 +61,31 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
     @Query("SELECT COUNT(t) FROM Ticket t WHERE t.event.id = :eventId AND t.faceEmbeddingId IS NOT NULL AND t.status = 'ACTIVE'")
     Long countTicketsWithFaceByEventId(@Param("eventId") Long eventId);
 
+    // ==================== ORGANIZER STATISTICS METHODS ====================
+
+    @Query("SELECT COUNT(t) FROM Ticket t WHERE t.event.organizer.id = :organizerId AND t.status <> 'CANCELLED'")
+    Long countActiveByOrganizerId(@Param("organizerId") Long organizerId);
+
+    @Query("SELECT COUNT(t) FROM Ticket t WHERE t.event.organizer.id = :organizerId AND t.isCheckedIn = true")
+    Long countCheckedInByOrganizerId(@Param("organizerId") Long organizerId);
+
+    @Query("SELECT CAST(t.createdAt AS DATE), COUNT(t) " +
+            "FROM Ticket t WHERE t.event.organizer.id = :organizerId " +
+            "AND t.status <> 'CANCELLED' AND t.createdAt >= :from " +
+            "GROUP BY CAST(t.createdAt AS DATE) ORDER BY CAST(t.createdAt AS DATE)")
+    List<Object[]> findTicketSalesByDayForOrganizer(@Param("organizerId") Long organizerId, @Param("from") LocalDateTime from);
+
+    @Query("SELECT t.event.id, t.event.title, COUNT(t), " +
+            "SUM(CASE WHEN t.isCheckedIn = true THEN 1 ELSE 0 END) " +
+            "FROM Ticket t WHERE t.event.organizer.id = :organizerId AND t.status <> 'CANCELLED' " +
+            "GROUP BY t.event.id, t.event.title")
+    List<Object[]> findCheckInStatsByOrganizer(@Param("organizerId") Long organizerId);
+
+    @Query("SELECT t.event.id, COUNT(t) FROM Ticket t " +
+            "WHERE t.event.id IN :eventIds AND t.status <> 'CANCELLED' " +
+            "GROUP BY t.event.id")
+    List<Object[]> countActiveTicketsByEventIds(@Param("eventIds") List<Long> eventIds);
+
     // ==================== ADMIN STATISTICS METHODS ====================
 
     @Query("SELECT COUNT(t) FROM Ticket t WHERE t.isCheckedIn = true")

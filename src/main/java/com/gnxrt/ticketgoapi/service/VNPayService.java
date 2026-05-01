@@ -19,6 +19,7 @@ import java.math.BigDecimal;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.*;
 
@@ -287,6 +288,93 @@ public class VNPayService {
         log.info("VNPay querydr success: vnpTxnRef={}, transactionStatus={}",
                 vnpTxnRef, dto.getVnpTransactionStatus());
         return Optional.of(dto);
+    }
+
+    /**
+     * Gọi VNPay refund (command = "refund").
+     * Trả refundTransactionId (vnp_TransactionNo trả về) nếu thành công.
+     * Ném VNPayRefundException nếu VNPay trả response code khác "00" hoặc IO fail.
+     */
+    public String refundTransaction(Payment payment, BigDecimal amount, String reason, String operator) {
+        String vnpTxnRef = payment.getVnpTxnRef();
+        if (vnpTxnRef == null || vnpTxnRef.isBlank()) {
+            throw new VNPayRefundException("Payment " + payment.getId() + " không có vnpTxnRef, không thể refund qua VNPay");
+        }
+
+        SimpleDateFormat formatter = new SimpleDateFormat("yyyyMMddHHmmss");
+        formatter.setTimeZone(TimeZone.getTimeZone(VNP_TIMEZONE));
+
+        String requestId = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+        String version = vnPayConfig.getVersion();
+        String command = "refund";
+        String tmnCode = vnPayConfig.getTmnCode();
+        String transactionType = "02";
+        String amountStr = String.valueOf(amount.multiply(new BigDecimal("100")).longValue());
+        String transactionNo = payment.getBankTransactionNo() != null ? payment.getBankTransactionNo() : "";
+        LocalDateTime payTime = payment.getPaidAt() != null ? payment.getPaidAt() : payment.getCreatedAt();
+        String transactionDate = formatter.format(Date.from(payTime.atZone(ZoneId.systemDefault()).toInstant()));
+        String createBy = operator != null ? operator : "system";
+        String createDate = formatter.format(new Date());
+        String ipAddr = payment.getIpAddress() != null ? payment.getIpAddress() : RECONCILE_IP;
+        String orderInfo = reason != null && !reason.isBlank()
+                ? "Refund " + vnpTxnRef + " - " + reason
+                : "Refund " + vnpTxnRef;
+
+        String hashData = String.join("|",
+                requestId, version, command, tmnCode, transactionType, vnpTxnRef,
+                amountStr, transactionNo, transactionDate, createBy, createDate, ipAddr, orderInfo);
+        String secureHash = hmacSHA512(vnPayConfig.getHashSecret(), hashData);
+
+        Map<String, String> body = new LinkedHashMap<>();
+        body.put("vnp_RequestId", requestId);
+        body.put("vnp_Version", version);
+        body.put("vnp_Command", command);
+        body.put("vnp_TmnCode", tmnCode);
+        body.put("vnp_TransactionType", transactionType);
+        body.put("vnp_TxnRef", vnpTxnRef);
+        body.put("vnp_Amount", amountStr);
+        body.put("vnp_OrderInfo", orderInfo);
+        body.put("vnp_TransactionNo", transactionNo);
+        body.put("vnp_TransactionDate", transactionDate);
+        body.put("vnp_CreateBy", createBy);
+        body.put("vnp_CreateDate", createDate);
+        body.put("vnp_IpAddr", ipAddr);
+        body.put("vnp_SecureHash", secureHash);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        JsonNode response;
+        try {
+            response = restTemplate.postForObject(
+                    vnPayConfig.getApiUrl(),
+                    new HttpEntity<>(body, headers),
+                    JsonNode.class
+            );
+        } catch (Exception e) {
+            log.error("VNPay refund call failed: vnpTxnRef={}", vnpTxnRef, e);
+            throw new VNPayRefundException("Gọi VNPay refund thất bại: " + e.getMessage(), e);
+        }
+
+        if (response == null) {
+            throw new VNPayRefundException("VNPay refund trả về rỗng, vnpTxnRef=" + vnpTxnRef);
+        }
+
+        String responseCode = textOrNull(response, "vnp_ResponseCode");
+        String message = textOrNull(response, "vnp_Message");
+        if (!"00".equals(responseCode)) {
+            log.warn("VNPay refund not OK: vnpTxnRef={}, code={}, message={}", vnpTxnRef, responseCode, message);
+            throw new VNPayRefundException("VNPay refund thất bại (code=" + responseCode + "): " + message);
+        }
+
+        String refundTransactionNo = textOrNull(response, "vnp_TransactionNo");
+        log.info("VNPay refund success: vnpTxnRef={}, refundTxnNo={}", vnpTxnRef, refundTransactionNo);
+        return refundTransactionNo;
+    }
+
+    public static class VNPayRefundException extends RuntimeException {
+        public VNPayRefundException(String message) { super(message); }
+        public VNPayRefundException(String message, Throwable cause) { super(message, cause); }
     }
 
     private String textOrNull(JsonNode node, String field) {

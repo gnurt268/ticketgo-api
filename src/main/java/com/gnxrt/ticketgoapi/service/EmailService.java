@@ -6,6 +6,7 @@ import com.gnxrt.ticketgoapi.enums.EmailType;
 import com.gnxrt.ticketgoapi.model.Event;
 import com.gnxrt.ticketgoapi.model.Order;
 import com.gnxrt.ticketgoapi.model.OrganizerRequest;
+import com.gnxrt.ticketgoapi.model.Payment;
 import com.gnxrt.ticketgoapi.model.Ticket;
 import com.gnxrt.ticketgoapi.model.User;
 import lombok.RequiredArgsConstructor;
@@ -233,6 +234,34 @@ public class EmailService {
             emailProducer.sendEmailEvent(event);
         } catch (Exception e) {
             log.error("Failed to publish event reminder email event for: {}", ticket.getHolderEmail(), e);
+        }
+    }
+
+    public void sendOrderRefundedEmail(Order order, Payment payment, String reason) {
+        log.info("Publishing order refunded email event for: {}", order.getBuyerEmail());
+
+        try {
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("order", order);
+            variables.put("event", order.getEvent());
+            variables.put("refundAmount", formatCurrency(payment.getRefundAmount()));
+            variables.put("refundTransactionId", payment.getRefundTransactionId());
+            variables.put("refundedAt", payment.getRefundedAt() != null
+                    ? payment.getRefundedAt().format(DATETIME_FORMATTER) : "");
+            variables.put("reason", reason);
+            variables.put("orderDetailUrl", emailConfig.getFrontendUrl() + "/orders/" + order.getOrderCode());
+
+            EmailEvent event = EmailEvent.builder()
+                    .type(EmailType.ORDER_REFUNDED)
+                    .to(order.getBuyerEmail())
+                    .subject("Hoàn tiền đơn hàng #" + order.getOrderCode())
+                    .templateName("email/order-refunded")
+                    .templateVariables(variables)
+                    .build();
+
+            emailProducer.sendEmailEvent(event);
+        } catch (Exception e) {
+            log.error("Failed to publish refund email event for: {}", order.getBuyerEmail(), e);
         }
     }
 
