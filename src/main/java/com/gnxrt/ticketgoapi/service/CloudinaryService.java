@@ -46,6 +46,28 @@ public class CloudinaryService {
         }
     }
 
+    public String uploadQRCode(byte[] qrBytes, String ticketCode) {
+        String publicId = "ticket_" + ticketCode;
+        try {
+            Map<?, ?> result = cloudinary.uploader().upload(
+                    qrBytes,
+                    ObjectUtils.asMap(
+                            "folder", "ticketgo/qrcodes",
+                            "public_id", publicId,
+                            "overwrite", true,
+                            "resource_type", "image",
+                            "format", "png"
+                    )
+            );
+            String secureUrl = (String) result.get("secure_url");
+            log.info("Uploaded QR code for ticket {}: {}", ticketCode, secureUrl);
+            return secureUrl;
+        } catch (IOException e) {
+            log.error("Failed to upload QR code for ticket {}: {}", ticketCode, e.getMessage(), e);
+            throw new BadRequestException("Không thể upload QR code, vui lòng thử lại");
+        }
+    }
+
     public void deleteByPublicId(String publicId) {
         try {
             cloudinary.uploader().destroy(publicId, ObjectUtils.asMap("resource_type", "image"));

@@ -17,9 +17,6 @@ import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
@@ -29,20 +26,16 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class QRCodeService {
 
+    private final CloudinaryService cloudinaryService;
+
     @Value("${app.qrcode.width:300}")
     private int qrCodeWidth;
 
     @Value("${app.qrcode.height:300}")
     private int qrCodeHeight;
 
-    @Value("${app.qrcode.storage-path:uploads/qrcodes}")
-    private String storagePath;
-
     @Value("${app.qrcode.secret-key}")
     private String qrSecretKey;
-
-    @Value("${app.base-url:http://localhost:8080}")
-    private String baseUrl;
 
     public String generateQRCodeBase64(String content) {
         try {
@@ -89,31 +82,10 @@ public class QRCodeService {
         }
     }
 
-    public String generateAndSaveQRCode(String content, String fileName) {
-        try {
-            byte[] qrCodeBytes = generateQRCodeBytes(content);
-
-            Path directory = Paths.get(storagePath);
-            if (!Files.exists(directory)) {
-                Files.createDirectories(directory);
-            }
-
-            String fullFileName = fileName + ".png";
-            Path filePath = directory.resolve(fullFileName);
-            Files.write(filePath, qrCodeBytes);
-
-            log.info("QR code saved to: {}", filePath);
-
-            return baseUrl + "/api/qrcode/" + fullFileName;
-        } catch (IOException e) {
-            log.error("Error saving QR code for content: {}", content, e);
-            throw new RuntimeException("Failed to save QR code", e);
-        }
-    }
-
     public String generateTicketQRCodeUrl(String ticketCode, String qrCode) {
         String content = buildTicketQRContent(ticketCode, qrCode);
-        return generateAndSaveQRCode(content, "ticket_" + ticketCode);
+        byte[] qrBytes = generateQRCodeBytes(content);
+        return cloudinaryService.uploadQRCode(qrBytes, ticketCode);
     }
 
     public String generateTicketQRCodeBase64(String ticketCode, String qrCode) {
@@ -236,29 +208,6 @@ public class QRCodeService {
         g.dispose();
 
         return combined;
-    }
-
-    public byte[] getQRCodeFromFile(String fileName) {
-        try {
-            Path filePath = Paths.get(storagePath).resolve(fileName);
-            if (Files.exists(filePath)) {
-                return Files.readAllBytes(filePath);
-            }
-            throw new RuntimeException("QR code file not found: " + fileName);
-        } catch (IOException e) {
-            log.error("Error reading QR code file: {}", fileName, e);
-            throw new RuntimeException("Failed to read QR code file", e);
-        }
-    }
-
-    public void deleteQRCodeFile(String fileName) {
-        try {
-            Path filePath = Paths.get(storagePath).resolve(fileName);
-            Files.deleteIfExists(filePath);
-            log.info("QR code file deleted: {}", fileName);
-        } catch (IOException e) {
-            log.error("Error deleting QR code file: {}", fileName, e);
-        }
     }
 
     @lombok.Data
