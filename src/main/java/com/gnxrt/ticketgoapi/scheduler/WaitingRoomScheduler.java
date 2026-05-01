@@ -6,9 +6,11 @@ import com.gnxrt.ticketgoapi.model.QueueEntry;
 import com.gnxrt.ticketgoapi.model.WaitingRoom;
 import com.gnxrt.ticketgoapi.repository.QueueEntryRepository;
 import com.gnxrt.ticketgoapi.repository.WaitingRoomRepository;
+import com.gnxrt.ticketgoapi.service.QueueNotificationService;
 import com.gnxrt.ticketgoapi.service.WaitingRoomRedisService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,11 +30,13 @@ public class WaitingRoomScheduler {
     private final WaitingRoomRepository waitingRoomRepository;
     private final QueueEntryRepository queueEntryRepository;
     private final WaitingRoomRedisService redisService;
+    private final QueueNotificationService queueNotificationService;
 
     /**
      * Job 1: Transition SCHEDULED -> PRE_QUEUE
      */
     @Scheduled(fixedRate = 10000)
+    @SchedulerLock(name = "waiting-room-transition-pre-queue", lockAtMostFor = "PT30S", lockAtLeastFor = "PT5S")
     @Transactional
     public void transitionToPreQueue() {
         LocalDateTime now = LocalDateTime.now();
@@ -55,6 +59,7 @@ public class WaitingRoomScheduler {
      * Job 2: Shuffle & Transition PRE_QUEUE -> SELLING
      */
     @Scheduled(fixedRate = 5000)
+    @SchedulerLock(name = "waiting-room-shuffle-start-selling", lockAtMostFor = "PT60S", lockAtLeastFor = "PT3S")
     @Transactional
     public void shuffleAndStartSelling() {
         LocalDateTime now = LocalDateTime.now();
@@ -70,7 +75,8 @@ public class WaitingRoomScheduler {
                     log.warn("No users to shuffle for event {}", eventId);
                 }
 
-                for (int i = 0; i < shuffledUsers.size(); i++) {
+                int total = shuffledUsers.size();
+                for (int i = 0; i < total; i++) {
                     Long userId = shuffledUsers.get(i);
                     int position = i + 1;
 
@@ -79,11 +85,15 @@ public class WaitingRoomScheduler {
                                 entry.setQueuePosition(position);
                                 queueEntryRepository.save(entry);
                             });
+
+                    queueNotificationService.notifyPositionUpdate(eventId, userId, position, total);
                 }
 
                 room.setStatus(WaitingRoomStatus.SELLING);
                 room.setShuffledAt(now);
                 waitingRoomRepository.save(room);
+
+                queueNotificationService.notifySellingStarted(eventId, total);
 
                 log.info("Waiting room {} shuffled {} users and started SELLING for event {}",
                         room.getId(), shuffledUsers.size(), eventId);
@@ -98,6 +108,7 @@ public class WaitingRoomScheduler {
      * Job 3: Drain Queue - Cho users vào protected zone
      */
     @Scheduled(fixedRate = 10000)
+    @SchedulerLock(name = "waiting-room-drain-queue", lockAtMostFor = "PT30S", lockAtLeastFor = "PT5S")
     @Transactional
     public void drainQueue() {
         List<WaitingRoom> sellingRooms = waitingRoomRepository
@@ -172,6 +183,8 @@ public class WaitingRoomScheduler {
                     queueEntryRepository.save(entry);
                 });
 
+        queueNotificationService.notifyUserReady(eventId, userId, accessToken);
+
         log.debug("User {} is now READY for event {}", userId, eventId);
     }
 
@@ -179,6 +192,7 @@ public class WaitingRoomScheduler {
      * Job 4: Expire Sessions
      */
     @Scheduled(fixedRate = 30000)
+    @SchedulerLock(name = "waiting-room-expire-sessions", lockAtMostFor = "PT60S", lockAtLeastFor = "PT10S")
     @Transactional
     public void expireSessions() {
         List<WaitingRoom> sellingRooms = waitingRoomRepository
@@ -204,13 +218,14 @@ public class WaitingRoomScheduler {
                 .findExpiredShoppingSessions(room.getId(), now);
 
         for (QueueEntry entry : expiredShopping) {
-            redisService.setUserExpired(eventId, entry.getUser().getId());
+            Long uid = entry.getUser().getId();
+            redisService.setUserExpired(eventId, uid);
             entry.setStatus(QueueEntryStatus.EXPIRED);
             entry.setCompletedAt(now);
             queueEntryRepository.save(entry);
+            queueNotificationService.notifyUserExpired(eventId, uid);
 
-            log.info("Expired SHOPPING session for user {} in event {}",
-                    entry.getUser().getId(), eventId);
+            log.info("Expired SHOPPING session for user {} in event {}", uid, eventId);
         }
 
         LocalDateTime readyTimeout = now.minusMinutes(2);
@@ -218,13 +233,14 @@ public class WaitingRoomScheduler {
                 .findExpiredReadyEntries(room.getId(), readyTimeout);
 
         for (QueueEntry entry : expiredReady) {
-            redisService.setUserExpired(eventId, entry.getUser().getId());
+            Long uid = entry.getUser().getId();
+            redisService.setUserExpired(eventId, uid);
             entry.setStatus(QueueEntryStatus.EXPIRED);
             entry.setCompletedAt(now);
             queueEntryRepository.save(entry);
+            queueNotificationService.notifyUserExpired(eventId, uid);
 
-            log.info("Expired READY entry for user {} in event {} (did not enter in time)",
-                    entry.getUser().getId(), eventId);
+            log.info("Expired READY entry for user {} in event {} (did not enter in time)", uid, eventId);
         }
     }
 
@@ -232,6 +248,7 @@ public class WaitingRoomScheduler {
      * Job 5: End Sales
      */
     @Scheduled(fixedRate = 60000)
+    @SchedulerLock(name = "waiting-room-end-sales", lockAtMostFor = "PT55S", lockAtLeastFor = "PT10S")
     @Transactional
     public void endSales() {
         LocalDateTime now = LocalDateTime.now();
@@ -256,6 +273,7 @@ public class WaitingRoomScheduler {
      * Job 6: Sync Stats
      */
     @Scheduled(fixedRate = 60000)
+    @SchedulerLock(name = "waiting-room-sync-stats", lockAtMostFor = "PT55S", lockAtLeastFor = "PT10S")
     @Transactional
     public void syncStats() {
         List<WaitingRoom> activeRooms = waitingRoomRepository.findActiveWaitingRooms();

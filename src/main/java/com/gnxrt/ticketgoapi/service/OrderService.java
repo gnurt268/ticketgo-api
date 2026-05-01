@@ -15,13 +15,16 @@ import com.gnxrt.ticketgoapi.repository.*;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -46,16 +49,17 @@ public class OrderService {
     private final VNPayService vnPayService;
     private final DistributedLockService distributedLockService;
     private final EmailService emailService;
+    private final TransactionTemplate transactionTemplate;
 
     private static final int PAYMENT_TIMEOUT_MINUTES = 15;
-    private static final long LOCK_WAIT_TIME = 10; // seconds
-    private static final long LOCK_LEASE_TIME = 60; // seconds
+    private static final long LOCK_WAIT_TIME = 5; // seconds
+    private static final long LOCK_LEASE_TIME = 10; // seconds
+    private static final int MAX_RETRY_ATTEMPTS = 2;
 
-    @Transactional
     public OrderDTO createOrder(CreateOrderRequest request, HttpServletRequest httpRequest) {
         log.info("Creating order for event: {}, zone: {}", request.getEventId(), request.getTicketZoneId());
 
-        // Check if this is a seat-based booking
+        String ipAddress = vnPayService.getIpAddress(httpRequest);
         boolean hasSeatSelection = request.getSeatIds() != null && !request.getSeatIds().isEmpty();
 
         if (hasSeatSelection) {
@@ -66,7 +70,7 @@ public class OrderService {
             }
 
             try {
-                return doCreateOrder(request, httpRequest);
+                return executeCreateOrderWithRetry(request, ipAddress);
             } finally {
                 distributedLockService.unlockSeats(seatIds);
             }
@@ -78,14 +82,50 @@ public class OrderService {
             }
 
             try {
-                return doCreateOrder(request, httpRequest);
+                return executeCreateOrderWithRetry(request, ipAddress);
             } finally {
                 distributedLockService.unlockZone(zoneId);
             }
         }
     }
 
-    private OrderDTO doCreateOrder(CreateOrderRequest request, HttpServletRequest httpRequest) {
+    private OrderDTO executeCreateOrderWithRetry(CreateOrderRequest request, String ipAddress) {
+        int attempt = 0;
+        while (true) {
+            try {
+                OrderCreationResult result = transactionTemplate.execute(status -> persistOrderInTx(request, ipAddress));
+                if (result == null) {
+                    throw new IllegalStateException("Order persistence returned null result");
+                }
+
+                String paymentUrl = vnPayService.createPaymentUrl(
+                        result.txnRef(),
+                        result.totalAmount(),
+                        result.description(),
+                        ipAddress
+                );
+                result.dto().setPaymentUrl(paymentUrl);
+
+                log.info("Order created: {}, amount: {}", result.dto().getOrderCode(), result.totalAmount());
+                return result.dto();
+            } catch (ObjectOptimisticLockingFailureException ex) {
+                attempt++;
+                if (attempt >= MAX_RETRY_ATTEMPTS) {
+                    log.warn("Optimistic lock conflict on createOrder after {} attempts, giving up", attempt);
+                    throw new ConflictException("Vé đang được nhiều người mua cùng lúc. Vui lòng thử lại sau ít giây.");
+                }
+                log.info("Optimistic lock conflict on createOrder, retrying attempt {}/{}", attempt + 1, MAX_RETRY_ATTEMPTS);
+                try {
+                    Thread.sleep(50L * attempt);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new ConflictException("Đặt vé bị gián đoạn. Vui lòng thử lại.");
+                }
+            }
+        }
+    }
+
+    private OrderCreationResult persistOrderInTx(CreateOrderRequest request, String ipAddress) {
         User currentUser = getCurrentUser();
 
         Event event = eventRepository.findById(request.getEventId())
@@ -199,7 +239,7 @@ public class OrderService {
                 .status(PaymentStatus.PENDING)
                 .amount(totalAmount)
                 .vnpTxnRef(txnRef)
-                .ipAddress(vnPayService.getIpAddress(httpRequest))
+                .ipAddress(ipAddress)
                 .build();
         paymentRepository.save(payment);
 
@@ -246,16 +286,10 @@ public class OrderService {
             ticketZoneRepository.save(zone);
         }
 
-        String paymentUrl = vnPayService.createPaymentUrl(
-                txnRef,
-                totalAmount,
-                "Thanh toan ve su kien: " + event.getTitle(),
-                vnPayService.getIpAddress(httpRequest)
-        );
+        String description = "Thanh toan ve su kien: " + event.getTitle();
+        OrderDTO dto = mapToDTO(order, tickets, null);
 
-        log.info("Order created: {}, amount: {}", orderCode, totalAmount);
-
-        return mapToDTO(order, tickets, paymentUrl);
+        return new OrderCreationResult(dto, txnRef, description, totalAmount);
     }
 
     @Transactional
@@ -393,10 +427,28 @@ public class OrderService {
         return mapToDTO(order, tickets, null);
     }
 
-    @Transactional
     public PaymentDTO retryPayment(String orderCode, HttpServletRequest httpRequest) {
         log.info("Retrying payment for order: {}", orderCode);
 
+        String ipAddress = vnPayService.getIpAddress(httpRequest);
+
+        RetryPaymentResult result = transactionTemplate.execute(status -> prepareRetryPaymentInTx(orderCode, ipAddress));
+        if (result == null) {
+            throw new IllegalStateException("Retry payment preparation returned null result");
+        }
+
+        String paymentUrl = vnPayService.createPaymentUrl(
+                result.txnRef(),
+                result.dto().getAmount(),
+                "Thanh toan ve su kien: " + result.eventTitle(),
+                ipAddress
+        );
+        result.dto().setPaymentUrl(paymentUrl);
+
+        return result.dto();
+    }
+
+    private RetryPaymentResult prepareRetryPaymentInTx(String orderCode, String ipAddress) {
         Order order = orderRepository.findByOrderCode(orderCode)
                 .orElseThrow(() -> new ResourceNotFoundException("Order", "orderCode", orderCode));
 
@@ -421,7 +473,6 @@ public class OrderService {
                     paymentRepository.save(p);
                 });
 
-        String ipAddress = vnPayService.getIpAddress(httpRequest);
         String txnRef = buildVnpTxnRef(order.getOrderCode(), order.getId());
 
         Payment newPayment = Payment.builder()
@@ -434,25 +485,19 @@ public class OrderService {
                 .build();
         paymentRepository.save(newPayment);
 
-        String paymentUrl = vnPayService.createPaymentUrl(
-                txnRef,
-                order.getTotalAmount(),
-                "Thanh toan ve su kien: " + order.getEvent().getTitle(),
-                ipAddress
-        );
-
-        return PaymentDTO.builder()
+        PaymentDTO dto = PaymentDTO.builder()
                 .orderCode(order.getOrderCode())
                 .orderId(order.getId())
                 .amount(order.getTotalAmount())
                 .currency(order.getCurrency())
                 .status(PaymentStatus.PENDING)
                 .paymentMethod(PaymentMethod.VNPAY)
-                .paymentUrl(paymentUrl)
                 .expiredAt(expiredAt)
                 .remainingSeconds((int) remainingSeconds)
                 .message("Payment URL generated successfully")
                 .build();
+
+        return new RetryPaymentResult(dto, txnRef, order.getEvent().getTitle());
     }
 
     public OrderDTO getOrderById(Long orderId) {
@@ -559,6 +604,7 @@ public class OrderService {
     }
 
     @Scheduled(fixedRate = 60000)
+    @SchedulerLock(name = "order-cancel-expired", lockAtMostFor = "PT55S", lockAtLeastFor = "PT10S")
     @Transactional
     public void cancelExpiredOrders() {
         LocalDateTime expiredTime = LocalDateTime.now().minusMinutes(PAYMENT_TIMEOUT_MINUTES);
@@ -695,4 +741,17 @@ public class OrderService {
                 .remainingSeconds(Math.max(0, remainingSeconds))
                 .build();
     }
+
+    private record OrderCreationResult(
+            OrderDTO dto,
+            String txnRef,
+            String description,
+            BigDecimal totalAmount
+    ) {}
+
+    private record RetryPaymentResult(
+            PaymentDTO dto,
+            String txnRef,
+            String eventTitle
+    ) {}
 }

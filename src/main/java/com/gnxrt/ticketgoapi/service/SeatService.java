@@ -16,8 +16,11 @@ import com.gnxrt.ticketgoapi.model.User;
 import com.gnxrt.ticketgoapi.repository.SeatRepository;
 import com.gnxrt.ticketgoapi.repository.TicketZoneRepository;
 import com.gnxrt.ticketgoapi.repository.UserRepository;
+import com.gnxrt.ticketgoapi.config.CacheConfig;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -45,6 +48,7 @@ public class SeatService {
     private static final long LOCK_WAIT_TIME = 5; // seconds
     private static final long LOCK_LEASE_TIME = 30; // seconds
 
+    @Cacheable(value = CacheConfig.CACHE_SEAT_MAP, key = "#zoneId")
     public SeatMapDTO getSeatMap(Long zoneId) {
         return getSeatMap(zoneId, null);
     }
@@ -336,6 +340,7 @@ public class SeatService {
     }
 
     @Scheduled(fixedRate = 60000)
+    @SchedulerLock(name = "seat-release-expired", lockAtMostFor = "PT55S", lockAtLeastFor = "PT10S")
     @Transactional
     public void releaseExpiredReservations() {
         LocalDateTime now = LocalDateTime.now();

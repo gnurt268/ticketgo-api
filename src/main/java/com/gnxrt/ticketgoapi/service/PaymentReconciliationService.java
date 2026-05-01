@@ -6,6 +6,7 @@ import com.gnxrt.ticketgoapi.model.Payment;
 import com.gnxrt.ticketgoapi.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -29,6 +30,7 @@ public class PaymentReconciliationService {
     private static final int RECONCILE_AFTER_MINUTES = 10;
 
     @Scheduled(fixedRate = 5 * 60 * 1000)
+    @SchedulerLock(name = "payment-reconcile", lockAtMostFor = "PT4M", lockAtLeastFor = "PT30S")
     public void reconcilePendingPayments() {
         LocalDateTime threshold = LocalDateTime.now().minusMinutes(RECONCILE_AFTER_MINUTES);
 
