@@ -110,6 +110,13 @@ public class ReviewService {
         return reviews.map(this::mapToDTO);
     }
 
+    public Page<ReviewDTO> getEventReviewsFiltered(
+            Long eventId, Integer rating, boolean withComment, Pageable pageable) {
+        Page<Review> reviews = reviewRepository.findEventReviewsFiltered(
+                eventId, rating, withComment, pageable);
+        return reviews.map(this::mapToDTO);
+    }
+
     public Page<MyReviewDTO> getMyReviews(Long userId, Pageable pageable) {
         Page<Review> reviews = reviewRepository.findByUserIdOrderByCreatedAtDesc(userId, pageable);
         return reviews.map(this::mapToMyReviewDTO);

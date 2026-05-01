@@ -22,6 +22,16 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
 
     Page<Review> findByEventIdAndIsApprovedTrueOrderByCreatedAtDesc(Long eventId, Pageable pageable);
 
+    @Query("SELECT r FROM Review r WHERE r.event.id = :eventId AND r.isApproved = true " +
+            "AND (:rating IS NULL OR r.rating = :rating) " +
+            "AND (:withComment = false OR (r.comment IS NOT NULL AND TRIM(r.comment) <> ''))")
+    Page<Review> findEventReviewsFiltered(
+            @Param("eventId") Long eventId,
+            @Param("rating") Integer rating,
+            @Param("withComment") boolean withComment,
+            Pageable pageable
+    );
+
     @Query("SELECT r FROM Review r WHERE r.event.id = :eventId AND r.isApproved = true ORDER BY r.createdAt DESC")
     List<Review> findRecentApprovedReviews(@Param("eventId") Long eventId, Pageable pageable);
 
@@ -32,6 +42,10 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
 
     @Query("SELECT r.rating, COUNT(r) FROM Review r WHERE r.event.id = :eventId AND r.isApproved = true GROUP BY r.rating")
     List<Object[]> countByRatingForEvent(@Param("eventId") Long eventId);
+
+    @Query("SELECT r.event.id, AVG(r.rating), COUNT(r) FROM Review r " +
+            "WHERE r.event.id IN :eventIds AND r.isApproved = true GROUP BY r.event.id")
+    List<Object[]> findStatsByEventIds(@Param("eventIds") List<Long> eventIds);
 
     Page<Review> findByUserIdOrderByCreatedAtDesc(Long userId, Pageable pageable);
 

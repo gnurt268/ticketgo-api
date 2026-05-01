@@ -40,10 +40,22 @@ public class ReviewController {
     public ResponseEntity<Page<ReviewDTO>> getEventReviews(
             @PathVariable Long eventId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) Integer rating,
+            @RequestParam(defaultValue = "false") boolean withComment,
+            @RequestParam(defaultValue = "newest") String sort
     ) {
-        Pageable pageable = PageRequest.of(page, size);
-        Page<ReviewDTO> reviews = reviewService.getEventReviews(eventId, pageable);
+        Sort sortOrder = switch (sort) {
+            case "oldest" -> Sort.by(Sort.Direction.ASC, "createdAt");
+            case "highest" -> Sort.by(Sort.Direction.DESC, "rating")
+                    .and(Sort.by(Sort.Direction.DESC, "createdAt"));
+            case "lowest" -> Sort.by(Sort.Direction.ASC, "rating")
+                    .and(Sort.by(Sort.Direction.DESC, "createdAt"));
+            default -> Sort.by(Sort.Direction.DESC, "createdAt");
+        };
+        Pageable pageable = PageRequest.of(page, size, sortOrder);
+        Page<ReviewDTO> reviews = reviewService.getEventReviewsFiltered(
+                eventId, rating, withComment, pageable);
         return ResponseEntity.ok(reviews);
     }
 
