@@ -1,8 +1,10 @@
 package com.gnxrt.ticketgoapi.config;
 
+import com.gnxrt.ticketgoapi.filter.UserMdcFilter;
 import com.gnxrt.ticketgoapi.security.JwtAuthenticationFilter;
 import com.gnxrt.ticketgoapi.security.CustomAuthenticationEntryPoint;
 import com.gnxrt.ticketgoapi.security.CustomAccessDeniedHandler;
+import com.gnxrt.ticketgoapi.security.RateLimitFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -27,6 +29,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthFilter;
+    private final RateLimitFilter rateLimitFilter;
     private final UserDetailsService userDetailsService;
     private final CustomAuthenticationEntryPoint authenticationEntryPoint;
     private final CustomAccessDeniedHandler accessDeniedHandler;
@@ -46,7 +49,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**", "/api/events/**", "/api/categories/**").permitAll()
                         .requestMatchers("/api/payment/vnpay/return", "/api/payment/vnpay/ipn").permitAll()
-                        .requestMatchers("/api/qrcode/**").permitAll()
+                        .requestMatchers("/actuator/health/**", "/actuator/prometheus", "/actuator/info").permitAll()
+                        .requestMatchers("/ws/queue/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/reviews/event/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/waiting-room/event/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/waiting-room/slug/**").permitAll()
@@ -62,7 +66,9 @@ public class SecurityConfig {
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
+                .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(new UserMdcFilter(), JwtAuthenticationFilter.class)
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint(authenticationEntryPoint)
                         .accessDeniedHandler(accessDeniedHandler)
