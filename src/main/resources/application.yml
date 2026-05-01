@@ -8,13 +8,29 @@ spring:
   # Database
   jpa:
     hibernate:
-      ddl-auto: update
-    show-sql: true
+      ddl-auto: validate
+    show-sql: false
   datasource:
     url: jdbc:mysql://localhost:3306/ticketgo_db
     username: ${DB_USERNAME:root}
     password: ${DB_PASSWORD:371902}
     driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX:50}
+      minimum-idle: ${DB_POOL_MIN_IDLE:10}
+      connection-timeout: 10000
+      idle-timeout: 300000
+      max-lifetime: 1200000
+      leak-detection-threshold: 60000
+      pool-name: TicketGoHikariPool
+
+  # Flyway
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 1
+    locations: classpath:db/migration
+    validate-on-migrate: true
   # Redis
   data:
     redis:
@@ -83,6 +99,11 @@ jwt:
   refresh-expiration: 604800000
 
 
+# AI Service
+ai:
+  service:
+    url: ${AI_SERVICE_URL:http://localhost:8001}
+
 # VNPay
 vnpay:
   tmn-code: ${VNPAY_TMN_CODE:}
@@ -107,7 +128,6 @@ app:
   qrcode:
     width: ${QRCODE_WIDTH:300}
     height: ${QRCODE_HEIGHT:300}
-    storage-path: ${QRCODE_STORAGE_PATH:uploads/qrcodes}
     secret-key: ${QRCODE_SECRET_KEY}
 
   # Upload
@@ -117,6 +137,29 @@ app:
 # Server
 server:
   port: 8080
+
+# Actuator + Metrics
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when_authorized
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+  prometheus:
+    metrics:
+      export:
+        enabled: true
 
 # Logging
 logging:
