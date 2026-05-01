@@ -29,6 +29,8 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
     Page<Order> findByEventIdAndPaymentStatusOrderByCreatedAtDesc(Long eventId, PaymentStatus status, Pageable pageable);
 
+    List<Order> findByEventIdAndPaymentStatus(Long eventId, PaymentStatus status);
+
     List<Order> findByPaymentStatusAndCreatedAtBefore(PaymentStatus status, LocalDateTime createdAt);
 
     Long countByPaymentStatus(PaymentStatus status);
@@ -52,6 +54,36 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     List<Object[]> getDailyRevenueStats(@Param("startDate") LocalDateTime startDate, @Param("endDate") LocalDateTime endDate);
 
     boolean existsByUserIdAndEventIdAndPaymentStatus(Long userId, Long eventId, PaymentStatus status);
+
+    // ==================== ORGANIZER STATISTICS METHODS ====================
+
+    @Query("SELECT COALESCE(SUM(o.totalAmount), 0) FROM Order o WHERE o.event.organizer.id = :organizerId AND o.paymentStatus = 'COMPLETED'")
+    BigDecimal sumRevenueByOrganizerId(@Param("organizerId") Long organizerId);
+
+    @Query("SELECT CAST(p.paidAt AS DATE), SUM(o.totalAmount), COUNT(DISTINCT o.id) " +
+            "FROM Order o JOIN o.payments p " +
+            "WHERE o.event.organizer.id = :organizerId " +
+            "AND p.status = 'COMPLETED' AND p.paidAt >= :from " +
+            "GROUP BY CAST(p.paidAt AS DATE) ORDER BY CAST(p.paidAt AS DATE)")
+    List<Object[]> findRevenueByDayForOrganizer(@Param("organizerId") Long organizerId, @Param("from") LocalDateTime from);
+
+    @Query("SELECT CAST(p.paidAt AS DATE), COALESCE(SUM(o.totalAmount), 0), COALESCE(SUM(o.quantity), 0) " +
+            "FROM Order o JOIN o.payments p " +
+            "WHERE p.status = 'COMPLETED' " +
+            "AND p.paidAt >= :from AND p.paidAt < :to " +
+            "AND (:organizerId IS NULL OR o.event.organizer.id = :organizerId) " +
+            "GROUP BY CAST(p.paidAt AS DATE) " +
+            "ORDER BY CAST(p.paidAt AS DATE)")
+    List<Object[]> findDailyRevenueStats(
+            @Param("organizerId") Long organizerId,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to
+    );
+
+    @Query("SELECT o.event.id, o.event.title, SUM(o.totalAmount) as revenue " +
+            "FROM Order o WHERE o.event.organizer.id = :organizerId AND o.paymentStatus = 'COMPLETED' " +
+            "GROUP BY o.event.id, o.event.title ORDER BY SUM(o.totalAmount) DESC")
+    List<Object[]> findTopEventsByRevenueForOrganizer(@Param("organizerId") Long organizerId, Pageable pageable);
 
     // ==================== ADMIN STATISTICS METHODS ====================
 

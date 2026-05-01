@@ -73,9 +73,9 @@ public class OrganizerRequestService {
     }
 
     public OrganizerRequestDTO getMyRequest(Long userId) {
-        OrganizerRequest request = organizerRequestRepository.findByUserId(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("Bạn chưa có yêu cầu đăng ký Organizer"));
-        return mapToDTO(request);
+        return organizerRequestRepository.findByUserId(userId)
+                .map(this::mapToDTO)
+                .orElse(null);
     }
 
     @Transactional

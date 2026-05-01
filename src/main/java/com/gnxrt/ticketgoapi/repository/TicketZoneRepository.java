@@ -37,4 +37,10 @@ public interface TicketZoneRepository extends JpaRepository<TicketZone, Long> {
 
     @Query("SELECT CASE WHEN SUM(tz.availableCapacity) > 0 THEN false ELSE true END FROM TicketZone tz WHERE tz.event.id = :eventId AND tz.isActive = true")
     Boolean isEventSoldOut(@Param("eventId") Long eventId);
+
+    @Query("SELECT tz.event.id, MIN(tz.price), MAX(tz.price), " +
+            "COALESCE(SUM(tz.totalCapacity), 0), COALESCE(SUM(tz.availableCapacity), 0) " +
+            "FROM TicketZone tz WHERE tz.event.id IN :eventIds AND tz.isActive = true " +
+            "GROUP BY tz.event.id")
+    List<Object[]> findStatsByEventIds(@Param("eventIds") List<Long> eventIds);
 }

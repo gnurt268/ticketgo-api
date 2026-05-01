@@ -3,6 +3,8 @@ package com.gnxrt.ticketgoapi.controller;
 import com.gnxrt.ticketgoapi.dto.request.event.EventRequest;
 import com.gnxrt.ticketgoapi.dto.response.event.EventDetailDTO;
 import com.gnxrt.ticketgoapi.dto.response.event.EventListDTO;
+import com.gnxrt.ticketgoapi.dto.response.organizer.OrganizerDashboardDTO;
+import com.gnxrt.ticketgoapi.dto.response.organizer.RevenueStatisticsDTO;
 import com.gnxrt.ticketgoapi.enums.EventStatus;
 import com.gnxrt.ticketgoapi.service.EventManagementService;
 import jakarta.validation.Valid;
@@ -54,6 +56,26 @@ public class OrganizerEventController {
     @GetMapping("/statistics")
     public ResponseEntity<Map<String, Object>> getMyStatistics() {
         return ResponseEntity.ok(eventManagementService.getMyEventStatistics());
+    }
+
+    /**
+     * ORGANIZER
+     * GET /api/organizer/events/statistics/revenue?period=7d|30d|90d
+     */
+    @GetMapping("/statistics/revenue")
+    public ResponseEntity<RevenueStatisticsDTO> getRevenueStatistics(
+            @RequestParam(defaultValue = "7d") String period
+    ) {
+        return ResponseEntity.ok(eventManagementService.getRevenueStatistics(period));
+    }
+
+    /**
+     * ORGANIZER
+     * GET /api/organizer/events/dashboard
+     */
+    @GetMapping("/dashboard")
+    public ResponseEntity<OrganizerDashboardDTO> getDashboard() {
+        return ResponseEntity.ok(eventManagementService.getOrganizerDashboard());
     }
 
     /**

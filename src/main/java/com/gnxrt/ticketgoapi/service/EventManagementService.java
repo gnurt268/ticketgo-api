@@ -1,11 +1,15 @@
 package com.gnxrt.ticketgoapi.service;
 
+import com.gnxrt.ticketgoapi.config.CacheConfig;
 import com.gnxrt.ticketgoapi.dto.request.event.EventApprovalRequest;
 import com.gnxrt.ticketgoapi.dto.request.event.EventRequest;
 import com.gnxrt.ticketgoapi.dto.response.event.EventDetailDTO;
 import com.gnxrt.ticketgoapi.dto.response.event.EventListDTO;
+import com.gnxrt.ticketgoapi.dto.response.organizer.OrganizerDashboardDTO;
+import com.gnxrt.ticketgoapi.dto.response.organizer.RevenueStatisticsDTO;
 import com.gnxrt.ticketgoapi.enums.EventStatus;
 import com.gnxrt.ticketgoapi.enums.EventType;
+import com.gnxrt.ticketgoapi.enums.PaymentStatus;
 import com.gnxrt.ticketgoapi.enums.TicketStatus;
 import com.gnxrt.ticketgoapi.exception.BadRequestException;
 import com.gnxrt.ticketgoapi.exception.ConflictException;
@@ -13,14 +17,18 @@ import com.gnxrt.ticketgoapi.exception.ForbiddenException;
 import com.gnxrt.ticketgoapi.exception.ResourceNotFoundException;
 import com.gnxrt.ticketgoapi.model.Category;
 import com.gnxrt.ticketgoapi.model.Event;
+import com.gnxrt.ticketgoapi.model.Order;
 import com.gnxrt.ticketgoapi.model.Ticket;
 import com.gnxrt.ticketgoapi.model.User;
 import com.gnxrt.ticketgoapi.repository.CategoryRepository;
 import com.gnxrt.ticketgoapi.repository.EventRepository;
+import com.gnxrt.ticketgoapi.repository.OrderRepository;
 import com.gnxrt.ticketgoapi.repository.TicketRepository;
 import com.gnxrt.ticketgoapi.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.Authentication;
@@ -29,10 +37,16 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
+import org.springframework.data.domain.PageRequest;
 
 @Slf4j
 @Service
@@ -43,7 +57,9 @@ public class EventManagementService {
     private final CategoryRepository categoryRepository;
     private final UserRepository userRepository;
     private final TicketRepository ticketRepository;
+    private final OrderRepository orderRepository;
     private final EmailService emailService;
+    private final RefundService refundService;
 
     public Page<EventListDTO> getAllEvents(
             EventStatus status,
@@ -131,6 +147,161 @@ public class EventManagementService {
         return stats;
     }
 
+    @Transactional(readOnly = true)
+    public RevenueStatisticsDTO getRevenueStatistics(String period) {
+        int days = parsePeriodDays(period);
+        User currentUser = getCurrentUser();
+        Long organizerId = currentUser.isAdmin() ? null : currentUser.getId();
+
+        ZoneId zone = ZoneId.of("Asia/Ho_Chi_Minh");
+        LocalDate today = LocalDate.now(zone);
+        LocalDate fromDate = today.minusDays(days - 1L);
+        LocalDateTime fromTs = fromDate.atStartOfDay();
+        LocalDateTime toTs = today.plusDays(1).atStartOfDay();
+
+        List<Object[]> rows = orderRepository.findDailyRevenueStats(organizerId, fromTs, toTs);
+
+        Map<String, Object[]> byDate = rows.stream()
+                .collect(Collectors.toMap(r -> r[0].toString(), r -> r, (a, b) -> a));
+
+        List<RevenueStatisticsDTO.DailyPoint> series = new ArrayList<>(days);
+        BigDecimal totalRevenue = BigDecimal.ZERO;
+        long totalTicketsSold = 0L;
+
+        for (int i = 0; i < days; i++) {
+            LocalDate d = fromDate.plusDays(i);
+            String key = d.toString();
+            Object[] row = byDate.get(key);
+            BigDecimal revenue = row != null ? toBigDecimal(row[1]) : BigDecimal.ZERO;
+            long tickets = row != null ? ((Number) row[2]).longValue() : 0L;
+
+            series.add(RevenueStatisticsDTO.DailyPoint.builder()
+                    .date(key)
+                    .revenue(revenue)
+                    .ticketsSold(tickets)
+                    .build());
+
+            totalRevenue = totalRevenue.add(revenue);
+            totalTicketsSold += tickets;
+        }
+
+        return RevenueStatisticsDTO.builder()
+                .period(period)
+                .from(fromDate.toString())
+                .to(today.toString())
+                .totalRevenue(totalRevenue)
+                .totalTicketsSold(totalTicketsSold)
+                .series(series)
+                .build();
+    }
+
+    private int parsePeriodDays(String period) {
+        if (period == null) {
+            return 7;
+        }
+        return switch (period.trim().toLowerCase()) {
+            case "7d" -> 7;
+            case "30d" -> 30;
+            case "90d" -> 90;
+            default -> throw new BadRequestException("period phải là 7d, 30d hoặc 90d");
+        };
+    }
+
+    @Transactional(readOnly = true)
+    public OrganizerDashboardDTO getOrganizerDashboard() {
+        User organizer = getCurrentUser();
+        Long organizerId = organizer.getId();
+        LocalDateTime thirtyDaysAgo = LocalDateTime.now().minusDays(30);
+
+        long totalEvents = eventRepository.countByOrganizerId(organizerId);
+        long totalTicketsSold = ticketRepository.countActiveByOrganizerId(organizerId);
+        BigDecimal totalRevenue = orderRepository.sumRevenueByOrganizerId(organizerId);
+        long totalCheckIns = ticketRepository.countCheckedInByOrganizerId(organizerId);
+
+        Map<String, Long> byStatus = new LinkedHashMap<>();
+        for (EventStatus s : EventStatus.values()) byStatus.put(s.name(), 0L);
+        eventRepository.countByOrganizerIdGroupByStatus(organizerId)
+            .forEach(row -> byStatus.put(((EventStatus) row[0]).name(), ((Number) row[1]).longValue()));
+
+        List<OrganizerDashboardDTO.RevenueByDay> revenueChart =
+            orderRepository.findRevenueByDayForOrganizer(organizerId, thirtyDaysAgo)
+                .stream()
+                .map(row -> OrganizerDashboardDTO.RevenueByDay.builder()
+                    .date(row[0].toString())
+                    .revenue(toBigDecimal(row[1]))
+                    .orderCount(((Number) row[2]).longValue())
+                    .build())
+                .collect(Collectors.toList());
+
+        List<OrganizerDashboardDTO.TicketSalesByDay> ticketSalesChart =
+            ticketRepository.findTicketSalesByDayForOrganizer(organizerId, thirtyDaysAgo)
+                .stream()
+                .map(row -> OrganizerDashboardDTO.TicketSalesByDay.builder()
+                    .date(row[0].toString())
+                    .ticketsSold(((Number) row[1]).longValue())
+                    .build())
+                .collect(Collectors.toList());
+
+        List<Object[]> topEventsRaw = orderRepository.findTopEventsByRevenueForOrganizer(
+                organizerId, PageRequest.of(0, 5));
+        List<Long> topEventIds = topEventsRaw.stream()
+                .map(row -> ((Number) row[0]).longValue())
+                .collect(Collectors.toList());
+        Map<Long, Long> ticketCountByEvent = topEventIds.isEmpty()
+                ? Map.of()
+                : ticketRepository.countActiveTicketsByEventIds(topEventIds).stream()
+                    .collect(Collectors.toMap(
+                        r -> ((Number) r[0]).longValue(),
+                        r -> ((Number) r[1]).longValue()));
+
+        List<OrganizerDashboardDTO.TopEventDTO> topEvents = topEventsRaw.stream()
+            .map(row -> {
+                Long eventId = ((Number) row[0]).longValue();
+                return OrganizerDashboardDTO.TopEventDTO.builder()
+                    .eventId(eventId)
+                    .eventTitle((String) row[1])
+                    .revenue(toBigDecimal(row[2]))
+                    .ticketsSold(ticketCountByEvent.getOrDefault(eventId, 0L))
+                    .build();
+            })
+            .collect(Collectors.toList());
+
+        List<OrganizerDashboardDTO.CheckInRateDTO> checkInRates =
+            ticketRepository.findCheckInStatsByOrganizer(organizerId)
+                .stream()
+                .map(row -> {
+                    long total = ((Number) row[2]).longValue();
+                    long checked = ((Number) row[3]).longValue();
+                    return OrganizerDashboardDTO.CheckInRateDTO.builder()
+                        .eventId(((Number) row[0]).longValue())
+                        .eventTitle((String) row[1])
+                        .totalTickets(total)
+                        .checkedIn(checked)
+                        .checkInRate(total > 0 ? (double) checked / total : 0.0)
+                        .build();
+                })
+                .collect(Collectors.toList());
+
+        return OrganizerDashboardDTO.builder()
+            .totalEvents(totalEvents)
+            .totalTicketsSold(totalTicketsSold)
+            .totalRevenue(totalRevenue != null ? totalRevenue : BigDecimal.ZERO)
+            .totalCheckIns(totalCheckIns)
+            .eventsByStatus(byStatus)
+            .revenueChart(revenueChart)
+            .ticketSalesChart(ticketSalesChart)
+            .topEventsByRevenue(topEvents)
+            .checkInRates(checkInRates)
+            .build();
+    }
+
+    private BigDecimal toBigDecimal(Object value) {
+        if (value == null) return BigDecimal.ZERO;
+        if (value instanceof BigDecimal bd) return bd;
+        if (value instanceof Number n) return BigDecimal.valueOf(n.doubleValue());
+        return new BigDecimal(value.toString());
+    }
+
     public Page<EventListDTO> getPendingEvents(Pageable pageable) {
         log.info("Getting pending events for approval");
         return eventRepository.findPendingEvents(pageable)
@@ -193,6 +364,10 @@ public class EventManagementService {
     }
 
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = CacheConfig.CACHE_EVENT_DETAIL, key = "#eventId"),
+            @CacheEvict(value = CacheConfig.CACHE_EVENT_DETAIL_SLUG, allEntries = true)
+    })
     public EventDetailDTO updateEvent(Long eventId, EventRequest request) {
         log.info("Updating event id: {}", eventId);
 
@@ -274,6 +449,10 @@ public class EventManagementService {
     }
 
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = CacheConfig.CACHE_EVENT_DETAIL, key = "#eventId"),
+            @CacheEvict(value = CacheConfig.CACHE_EVENT_DETAIL_SLUG, allEntries = true)
+    })
     public EventDetailDTO approveOrRejectEvent(Long eventId, EventApprovalRequest request) {
         log.info("Processing approval for event id: {} with action: {}", eventId, request.getAction());
 
@@ -307,6 +486,10 @@ public class EventManagementService {
     }
 
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = CacheConfig.CACHE_EVENT_DETAIL, key = "#eventId"),
+            @CacheEvict(value = CacheConfig.CACHE_EVENT_DETAIL_SLUG, allEntries = true)
+    })
     public EventDetailDTO publishEvent(Long eventId) {
         log.info("Publishing event id: {}", eventId);
 
@@ -331,6 +514,10 @@ public class EventManagementService {
     }
 
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = CacheConfig.CACHE_EVENT_DETAIL, key = "#eventId"),
+            @CacheEvict(value = CacheConfig.CACHE_EVENT_DETAIL_SLUG, allEntries = true)
+    })
     public EventDetailDTO toggleFeatured(Long eventId) {
         log.info("Toggling featured status for event id: {}", eventId);
 
@@ -345,6 +532,10 @@ public class EventManagementService {
     }
 
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = CacheConfig.CACHE_EVENT_DETAIL, key = "#eventId"),
+            @CacheEvict(value = CacheConfig.CACHE_EVENT_DETAIL_SLUG, allEntries = true)
+    })
     public EventDetailDTO cancelEvent(Long eventId, String reason) {
         log.info("Cancelling event id: {}", eventId);
 
@@ -370,14 +561,34 @@ public class EventManagementService {
             emailService.sendEventCancelledEmail(ticket, reason);
         }
 
-        // Refund process - cần implement riêng với payment gateway
-        // TODO: Implement refund logic khi cần
+        // Auto-refund các order COMPLETED. Mỗi refund chạy trong transaction riêng
+        // (RefundService.refundOrder dùng REQUIRES_NEW) để 1 order fail không rollback
+        // toàn bộ thao tác hủy event.
+        List<Order> paidOrders = orderRepository.findByEventIdAndPaymentStatus(eventId, PaymentStatus.COMPLETED);
+        String refundReason = "Sự kiện bị hủy"
+                + (reason != null && !reason.isBlank() ? ": " + reason : "");
+        int refundSuccess = 0;
+        int refundFail = 0;
+        for (Order paid : paidOrders) {
+            try {
+                refundService.refundOrder(paid.getId(), refundReason);
+                refundSuccess++;
+            } catch (Exception ex) {
+                refundFail++;
+                log.error("Auto-refund failed for order {} (event {}): {}",
+                        paid.getId(), eventId, ex.getMessage());
+            }
+        }
+        log.info("Event {} cancelled, auto-refund: success={}, fail={}", eventId, refundSuccess, refundFail);
 
-        log.info("Event cancelled successfully with id: {}", event.getId());
         return mapToDetailDTO(event);
     }
 
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = CacheConfig.CACHE_EVENT_DETAIL, key = "#eventId"),
+            @CacheEvict(value = CacheConfig.CACHE_EVENT_DETAIL_SLUG, allEntries = true)
+    })
     public void deleteEvent(Long eventId) {
         log.info("Deleting event id: {}", eventId);
 
