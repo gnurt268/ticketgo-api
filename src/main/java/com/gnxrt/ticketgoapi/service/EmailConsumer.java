@@ -47,7 +47,15 @@ public class EmailConsumer {
 
             log.info("Email [{}] sent successfully to: {}", event.getType(), event.getTo());
         } catch (Exception e) {
-            log.error("Failed to process email event [{}] for: {}", event.getType(), event.getTo(), e);
+            log.error("Failed to process email event [{}] for: {} — will retry / route to DLT",
+                    event.getType(), event.getTo(), e);
+            throw new EmailDeliveryException("Email delivery failed for " + event.getTo(), e);
+        }
+    }
+
+    public static class EmailDeliveryException extends RuntimeException {
+        public EmailDeliveryException(String message, Throwable cause) {
+            super(message, cause);
         }
     }
 
