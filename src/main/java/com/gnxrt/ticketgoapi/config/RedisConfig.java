@@ -8,6 +8,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
+import org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
@@ -25,6 +26,9 @@ public class RedisConfig {
     @Value("${spring.data.redis.password:}")
     private String redisPassword;
 
+    @Value("${spring.data.redis.ssl.enabled:false}")
+    private boolean sslEnabled;
+
     @Bean
     public RedisConnectionFactory redisConnectionFactory() {
         RedisStandaloneConfiguration config = new RedisStandaloneConfiguration();
@@ -32,6 +36,11 @@ public class RedisConfig {
         config.setPort(redisPort);
         if (redisPassword != null && !redisPassword.isEmpty()) {
             config.setPassword(redisPassword);
+        }
+        if (sslEnabled) {
+            LettuceClientConfiguration clientConfig = LettuceClientConfiguration.builder()
+                    .useSsl().disablePeerVerification().build();
+            return new LettuceConnectionFactory(config, clientConfig);
         }
         return new LettuceConnectionFactory(config);
     }
@@ -51,7 +60,8 @@ public class RedisConfig {
     @Bean(destroyMethod = "shutdown")
     public RedissonClient redissonClient() {
         Config config = new Config();
-        String address = String.format("redis://%s:%d", redisHost, redisPort);
+        String scheme = sslEnabled ? "rediss" : "redis";
+        String address = String.format("%s://%s:%d", scheme, redisHost, redisPort);
 
         if (redisPassword != null && !redisPassword.isEmpty()) {
             config.useSingleServer()
