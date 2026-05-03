@@ -13,7 +13,7 @@ public class EmailConfig {
 
     private String fromName = "TicketGo";
 
-    private String frontendUrl = "http://localhost:3000";
+    private String frontendUrl;
 
     private String logoUrl = "https://ticketgo.vn/logo.png";
 

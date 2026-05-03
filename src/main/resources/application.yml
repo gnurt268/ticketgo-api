@@ -123,6 +123,7 @@ app:
     support-email: support@ticketgo.vn
     hotline: "1900 1234"
     logo-url: ${APP_FRONTEND_URL:http://localhost:3000}/logo.png
+    frontend-url: ${APP_FRONTEND_URL:http://localhost:3000}
 
   # QR Code
   qrcode:
