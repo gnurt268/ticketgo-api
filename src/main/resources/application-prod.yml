@@ -1,0 +1,39 @@
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+  flyway:
+    enabled: false
+  datasource:
+    url: jdbc:mysql://${DB_HOST}:${DB_PORT}/${DB_NAME}?sslMode=VERIFY_IDENTITY&enabledTLSProtocols=TLSv1.2,TLSv1.3
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 10000
+      idle-timeout: 300000
+      max-lifetime: 1200000
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+      password: ${REDIS_PASSWORD}
+      ssl:
+        enabled: true
+      timeout: 5000ms
+  kafka:
+    bootstrap-servers: kafka:9092
+  thymeleaf:
+    cache: true
+  servlet:
+    multipart:
+      max-file-size: 30MB
+      max-request-size: 30MB
+
+logging:
+  level:
+    com.gnxrt.ticketgoapi: INFO
+    org.springframework.mail: WARN
+    root: WARN

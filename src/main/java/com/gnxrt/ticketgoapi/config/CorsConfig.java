@@ -19,7 +19,7 @@ public class CorsConfig {
         configuration.setAllowedOrigins(Arrays.asList(
                 "http://localhost:3000",
                 "http://localhost:3001",
-                "https://ticketgo-web.vercel.app/"
+                "https://ticketgo-web.vercel.app"
         ));
 
         configuration.setAllowedMethods(Arrays.asList(

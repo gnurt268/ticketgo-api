@@ -42,3 +42,5 @@ build/
 *.md
 
 .claude
+.env.prod
+.env

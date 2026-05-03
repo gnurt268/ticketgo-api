@@ -1,0 +1,56 @@
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    restart: unless-stopped
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+    volumes:
+      - zk-data:/var/lib/zookeeper/data
+      - zk-log:/var/lib/zookeeper/log
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    restart: unless-stopped
+    depends_on: [zookeeper]
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_HEAP_OPTS: "-Xmx512m -Xms256m"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+
+  ai:
+    image: ghcr.io/gnurt268/ticketgo-ai:latest
+    restart: unless-stopped
+    expose:
+      - "8001"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  api:
+    image: ghcr.io/gnurt268/ticketgo-api:latest
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_started
+      ai:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:8080"
+    env_file:
+      - /home/deploy/ticketgo/.env.prod
+    environment:
+      AI_SERVICE_URL: http://ai:8001
+    volumes:
+      - /home/deploy/ticketgo/uploads:/app/uploads
+
+volumes:
+  zk-data:
+  zk-log:
+  kafka-data:
