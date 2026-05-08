@@ -9,7 +9,7 @@ import org.springframework.context.annotation.Configuration;
 @ConfigurationProperties(prefix = "app.email")
 public class EmailConfig {
 
-    private String fromAddress = "noreply@ticketgo.vn";
+    private String fromAddress = "ticketgo88f1@gmail.com";
 
     private String fromName = "TicketGo";
 
@@ -17,7 +17,7 @@ public class EmailConfig {
 
     private String logoUrl = "https://ticketgo.vn/logo.png";
 
-    private String supportEmail = "support@ticketgo.vn";
+    private String supportEmail = "ticketgo88f1@gmail.com";
 
-    private String hotline = "1900 1234";
+    private String hotline = "1900 XXXX";
 }
