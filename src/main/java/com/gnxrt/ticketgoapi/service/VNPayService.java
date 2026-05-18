@@ -32,7 +32,7 @@ public class VNPayService {
     private final RestTemplate restTemplate;
 
     private static final String HMAC_SHA512 = "HmacSHA512";
-    private static final String VNP_TIMEZONE = "Etc/GMT+7";
+    private static final String VNP_TIMEZONE = "Asia/Ho_Chi_Minh";
     private static final String RECONCILE_IP = "127.0.0.1";
 
     /**
@@ -55,7 +55,7 @@ public class VNPayService {
         vnpParams.put("vnp_ReturnUrl", vnPayConfig.getReturnUrl());
         vnpParams.put("vnp_IpAddr", ipAddress);
 
-        Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("Etc/GMT+7"));
+        Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("Asia/Ho_Chi_Minh"));
         SimpleDateFormat formatter = new SimpleDateFormat("yyyyMMddHHmmss");
         String createDate = formatter.format(calendar.getTime());
         vnpParams.put("vnp_CreateDate", createDate);
