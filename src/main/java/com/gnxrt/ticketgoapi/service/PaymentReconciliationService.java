@@ -45,13 +45,19 @@ public class PaymentReconciliationService {
 
         for (Payment payment : stalePayments) {
             try {
-                Optional<VNPayCallbackDTO> result = vnPayService.queryTransaction(payment);
-                if (result.isEmpty()) {
-                    log.info("Payment still pending at VNPay, retry next cycle: vnpTxnRef={}", payment.getVnpTxnRef());
+                Payment freshPayment = paymentRepository.findById(payment.getId()).orElse(null);
+                if (freshPayment == null || freshPayment.getStatus() != PaymentStatus.PENDING) {
+                    log.info("Payment already processed, skipping: vnpTxnRef={}", payment.getVnpTxnRef());
                     continue;
                 }
-                orderService.applyQuerydrResult(payment.getId(), result.get());
-                log.info("Payment reconciled: vnpTxnRef={}", payment.getVnpTxnRef());
+
+                Optional<VNPayCallbackDTO> result = vnPayService.queryTransaction(freshPayment);
+                if (result.isEmpty()) {
+                    log.info("Payment still pending at VNPay, retry next cycle: vnpTxnRef={}", freshPayment.getVnpTxnRef());
+                    continue;
+                }
+                orderService.applyQuerydrResult(freshPayment.getId(), result.get());
+                log.info("Payment reconciled: vnpTxnRef={}", freshPayment.getVnpTxnRef());
             } catch (Exception e) {
                 log.error("Failed to reconcile payment vnpTxnRef={}", payment.getVnpTxnRef(), e);
             }

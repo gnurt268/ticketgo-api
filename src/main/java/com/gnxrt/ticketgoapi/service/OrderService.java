@@ -346,6 +346,13 @@ public class OrderService {
             return mapToDTO(order, tickets, null);
         }
 
+        if (order.getPaymentStatus() != PaymentStatus.PENDING) {
+            log.warn("Order already processed: orderCode={}, status={}",
+                    orderCode, order.getPaymentStatus());
+            List<Ticket> tickets = ticketRepository.findByOrderId(order.getId());
+            return mapToDTO(order, tickets, null);
+        }
+
         if (callback.isSuccess()) {
             log.info("Payment successful for order: {}", orderCode);
 
@@ -394,8 +401,6 @@ public class OrderService {
             return mapToDTO(order, tickets, null);
         }
 
-        // Order ở trạng thái PENDING để user có thể retry (tạo Payment mới).
-        // Tickets/seats/capacity chỉ được release khi user cancel hoặc job cancelExpiredOrders chạy.
         log.warn("Payment failed for order: {}, code: {}", orderCode, callback.getVnpResponseCode());
 
         payment.setStatus(PaymentStatus.FAILED);
@@ -605,55 +610,63 @@ public class OrderService {
 
     @Scheduled(fixedRate = 60000)
     @SchedulerLock(name = "order-cancel-expired", lockAtMostFor = "PT55S", lockAtLeastFor = "PT10S")
-    @Transactional
     public void cancelExpiredOrders() {
         LocalDateTime expiredTime = LocalDateTime.now().minusMinutes(PAYMENT_TIMEOUT_MINUTES);
-
         List<Order> expiredOrders = orderRepository.findByPaymentStatusAndCreatedAtBefore(
                 PaymentStatus.PENDING, expiredTime
         );
 
         if (!expiredOrders.isEmpty()) {
             log.info("Cancelling {} expired orders", expiredOrders.size());
-
             for (Order order : expiredOrders) {
                 try {
-                    order.setPaymentStatus(PaymentStatus.EXPIRED);
-
-                    paymentRepository.findFirstByOrderIdAndStatusOrderByCreatedAtDesc(order.getId(), PaymentStatus.PENDING)
-                            .ifPresent(p -> {
-                                p.setStatus(PaymentStatus.EXPIRED);
-                                paymentRepository.save(p);
-                            });
-
-                    List<Ticket> tickets = ticketRepository.findByOrderId(order.getId());
-                    for (Ticket ticket : tickets) {
-                        ticket.setStatus(TicketStatus.CANCELLED);
-
-                        if (ticket.getSeat() != null) {
-                            Seat seat = ticket.getSeat();
-                            seat.setStatus(SeatStatus.AVAILABLE);
-                            seat.setReservedBy(null);
-                            seat.setReservedUntil(null);
-                            seatRepository.save(seat);
-                        }
-                    }
-                    ticketRepository.saveAll(tickets);
-
-                    if (!tickets.isEmpty()) {
-                        TicketZone zone = tickets.get(0).getTicketZone();
-                        zone.setAvailableCapacity(zone.getAvailableCapacity() + order.getQuantity());
-                        zone.setReservedCapacity(Math.max(0, zone.getReservedCapacity() - order.getQuantity()));
-                        ticketZoneRepository.save(zone);
-                    }
-
-                    orderRepository.save(order);
-                    log.info("Expired order cancelled: {}", order.getOrderCode());
+                    cancelExpiredOrderInTx(order.getId()); // Mỗi order 1 tx riêng
                 } catch (Exception e) {
                     log.error("Error cancelling expired order: {}", order.getOrderCode(), e);
                 }
             }
         }
+    }
+
+    @Transactional
+    public void cancelExpiredOrderInTx(Long orderId) {
+        Order order = orderRepository.findById(orderId).orElse(null);
+
+        // Check trạng thái mới nhất trước khi cancel
+        if (order == null || order.getPaymentStatus() != PaymentStatus.PENDING) {
+            return;
+        }
+
+        order.setPaymentStatus(PaymentStatus.EXPIRED);
+
+        paymentRepository.findFirstByOrderIdAndStatusOrderByCreatedAtDesc(order.getId(), PaymentStatus.PENDING)
+                .ifPresent(p -> {
+                    p.setStatus(PaymentStatus.EXPIRED);
+                    paymentRepository.save(p);
+                });
+
+        List<Ticket> tickets = ticketRepository.findByOrderId(order.getId());
+        for (Ticket ticket : tickets) {
+            ticket.setStatus(TicketStatus.CANCELLED);
+            if (ticket.getSeat() != null) {
+                Seat seat = ticket.getSeat();
+                seat.setStatus(SeatStatus.AVAILABLE);
+                seat.setReservedBy(null);
+                seat.setReservedUntil(null);
+                seatRepository.save(seat);
+            }
+        }
+        ticketRepository.saveAll(tickets);
+
+        if (!tickets.isEmpty()) {
+            TicketZone zone = tickets.get(0).getTicketZone();
+            zone.setAvailableCapacity(zone.getAvailableCapacity() + order.getQuantity());
+            zone.setReservedCapacity(Math.max(0, zone.getReservedCapacity() - order.getQuantity()));
+            ticketZoneRepository.save(zone);
+        }
+
+        orderRepository.save(order);
+        log.info("Expired order cancelled: {}", order.getOrderCode());
     }
 
     private String generateOrderCode() {
