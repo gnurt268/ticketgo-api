@@ -7,6 +7,7 @@ import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
@@ -20,8 +21,9 @@ public class WaitingRoomRedisService {
     private static final String PRE_QUEUE_KEY = "waiting_room:pre_queue:";
     private static final String QUEUE_KEY = "waiting_room:queue:";
     private static final String SESSION_KEY = "waiting_room:session:";
-    private static final String SERVING_COUNTER_KEY = "waiting_room:serving:";
-    private static final String ACTIVE_COUNTER_KEY = "waiting_room:active:";
+    // Active shoppers (READY/SHOPPING): ZSet member=userId, score=epoch millis của expiresAt.
+    // Tự dọn entry hết hạn khi đếm → không drift, không kẹt capacity (thay cho counter số cũ).
+    private static final String ACTIVE_ZSET_KEY = "waiting_room:active_z:";
     private static final String USER_TOKEN_KEY = "waiting_room:user_token:";
     private static final String TOKEN_USER_KEY = "waiting_room:token_user:";
 
@@ -92,7 +94,9 @@ public class WaitingRoomRedisService {
     }
 
     /**
-     * Shuffle pre-queue và chuyển sang main queue
+     * Shuffle pre-queue và chuyển sang main queue.
+     * Score = vị trí ngẫu nhiên (1..N). User vào sau (late arrival) dùng score = timestamp
+     * nên luôn xếp sau nhóm shuffle. Thứ tự phục vụ luôn theo ZRANK (score thấp = trước).
      */
     public List<Long> shuffleAndCreateQueue(Long eventId) {
         String preQueueKey = PRE_QUEUE_KEY + eventId;
@@ -123,12 +127,8 @@ public class WaitingRoomRedisService {
         }
         redisTemplate.expire(queueKey, QUEUE_TTL_HOURS, TimeUnit.HOURS);
 
-        String servingKey = SERVING_COUNTER_KEY + eventId;
-        redisTemplate.opsForValue().set(servingKey, "0", QUEUE_TTL_HOURS, TimeUnit.HOURS);
-
-        String activeKey = ACTIVE_COUNTER_KEY + eventId;
-        redisTemplate.opsForValue().set(activeKey, "0", QUEUE_TTL_HOURS, TimeUnit.HOURS);
-
+        // Reset active shoppers cho phiên bán mới.
+        redisTemplate.delete(ACTIVE_ZSET_KEY + eventId);
         redisTemplate.delete(preQueueKey);
 
         log.info("Shuffled {} users for event {}", userIds.size(), eventId);
@@ -136,12 +136,13 @@ public class WaitingRoomRedisService {
     }
 
     /**
-     * Lấy vị trí của user trong queue
+     * Vị trí hiện tại của user trong queue (1-based) = ZRANK + 1.
+     * Giảm dần khi người phía trước được phục vụ → UX "bạn đang tiến lên".
      */
     public Integer getQueuePosition(Long eventId, Long userId) {
         String queueKey = QUEUE_KEY + eventId;
-        Double score = redisTemplate.opsForZSet().score(queueKey, userId.toString());
-        return score != null ? score.intValue() : null;
+        Long rank = redisTemplate.opsForZSet().rank(queueKey, userId.toString());
+        return rank != null ? rank.intValue() + 1 : null;
     }
 
     /**
@@ -154,115 +155,103 @@ public class WaitingRoomRedisService {
     }
 
     /**
-     * Lấy serving counter hiện tại (position đang được serve)
-     */
-    public int getServingPosition(Long eventId) {
-        String servingKey = SERVING_COUNTER_KEY + eventId;
-        Object value = redisTemplate.opsForValue().get(servingKey);
-        return value != null ? Integer.parseInt(value.toString()) : 0;
-    }
-
-    /**
-     * Tăng serving counter và trả về new value
-     */
-    public int incrementServingPosition(Long eventId, int increment) {
-        String servingKey = SERVING_COUNTER_KEY + eventId;
-        Long newValue = redisTemplate.opsForValue().increment(servingKey, increment);
-        return newValue != null ? newValue.intValue() : 0;
-    }
-
-    /**
-     * Lấy số người đang shopping
+     * Lấy số người đang shopping (READY/SHOPPING). Tự dọn session hết hạn trước khi đếm
+     * → không bao giờ drift hay kẹt capacity.
      */
     public int getActiveShoppersCount(Long eventId) {
-        String activeKey = ACTIVE_COUNTER_KEY + eventId;
-        Object value = redisTemplate.opsForValue().get(activeKey);
-        return value != null ? Integer.parseInt(value.toString()) : 0;
+        String activeKey = ACTIVE_ZSET_KEY + eventId;
+        long now = System.currentTimeMillis();
+        redisTemplate.opsForZSet().removeRangeByScore(activeKey, 0, now);
+        Long count = redisTemplate.opsForZSet().zCard(activeKey);
+        return count != null ? count.intValue() : 0;
+    }
+
+    private void addActiveShopper(Long eventId, Long userId, LocalDateTime expiresAt) {
+        long expiryMillis = expiresAt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+        redisTemplate.opsForZSet().add(ACTIVE_ZSET_KEY + eventId, userId.toString(), expiryMillis);
+    }
+
+    private void removeActiveShopper(Long eventId, Long userId) {
+        redisTemplate.opsForZSet().remove(ACTIVE_ZSET_KEY + eventId, userId.toString());
     }
 
     /**
-     * Tăng/giảm active shoppers counter
+     * Atomic pop N người đầu hàng (score thấp nhất) khỏi queue ZSet để admit.
+     * ZPOPMIN là atomic → an toàn khi nhiều pod chạy drain (không cấp vượt quota,
+     * không cần serving counter / self-heal).
      */
-    public void updateActiveShoppersCount(Long eventId, int delta) {
-        String activeKey = ACTIVE_COUNTER_KEY + eventId;
-        redisTemplate.opsForValue().increment(activeKey, delta);
-    }
-
-    /**
-     * Lấy danh sách users tiếp theo cần được cho vào (để admit)
-     * @param eventId ID của event
-     * @param count Số lượng users cần lấy
-     * @return Danh sách userIds
-     */
-    public List<Long> getNextUsersToAdmit(Long eventId, int count) {
+    public List<Long> popNextUsersToAdmit(Long eventId, int count) {
+        if (count <= 0) return Collections.emptyList();
         String queueKey = QUEUE_KEY + eventId;
-        int currentServing = getServingPosition(eventId);
-
-        Set<Object> users = redisTemplate.opsForZSet().rangeByScore(
-                queueKey,
-                currentServing + 1,
-                currentServing + count
-        );
-
-        if (users == null) return Collections.emptyList();
+        Set<ZSetOperations.TypedTuple<Object>> popped =
+                redisTemplate.opsForZSet().popMin(queueKey, count);
+        if (popped == null || popped.isEmpty()) return Collections.emptyList();
 
         List<Long> result = new ArrayList<>();
-        for (Object user : users) {
-            result.add(Long.parseLong(user.toString()));
+        for (ZSetOperations.TypedTuple<Object> tuple : popped) {
+            if (tuple.getValue() != null) {
+                result.add(Long.parseLong(tuple.getValue().toString()));
+            }
         }
         return result;
     }
 
     /**
-     * Lấy số người đang ở phía trước trong queue
+     * Trả user về đầu hàng chờ (khi admit thất bại) để được retry trước ở vòng drain kế.
      */
-    public int getPeopleAhead(Long eventId, Long userId) {
-        Integer position = getQueuePosition(eventId, userId);
-        if (position == null) return 0;
-
-        int servingPosition = getServingPosition(eventId);
-        return Math.max(0, position - servingPosition - 1);
+    public void requeueAtFront(Long eventId, Long userId) {
+        String queueKey = QUEUE_KEY + eventId;
+        Set<ZSetOperations.TypedTuple<Object>> head =
+                redisTemplate.opsForZSet().rangeWithScores(queueKey, 0, 0);
+        double score = 0;
+        if (head != null && !head.isEmpty()) {
+            Double min = head.iterator().next().getScore();
+            score = (min != null ? min : 0) - 1;
+        }
+        redisTemplate.opsForZSet().add(queueKey, userId.toString(), score);
+        log.warn("Requeued user {} at front of event {} after admit failure", userId, eventId);
     }
 
     /**
-     * Thêm user vào cuối queue (late arrival)
+     * Số người đang ở phía trước trong queue = ZRANK (0-based).
+     */
+    public int getPeopleAhead(Long eventId, Long userId) {
+        String queueKey = QUEUE_KEY + eventId;
+        Long rank = redisTemplate.opsForZSet().rank(queueKey, userId.toString());
+        return rank != null ? rank.intValue() : 0;
+    }
+
+    /**
+     * Thêm user vào cuối queue (late arrival). Score = timestamp → atomic (1 ZADD),
+     * không race giữa các pod, luôn xếp sau nhóm shuffle (score 1..N). Trả về vị trí hiện tại.
      */
     public int addToQueueEnd(Long eventId, Long userId, String visitorToken) {
         String queueKey = QUEUE_KEY + eventId;
 
-        Set<Object> lastUser = redisTemplate.opsForZSet().reverseRange(queueKey, 0, 0);
-        int maxPosition = 0;
-        if (lastUser != null && !lastUser.isEmpty()) {
-            String lastUserId = lastUser.iterator().next().toString();
-            Double score = redisTemplate.opsForZSet().score(queueKey, lastUserId);
-            maxPosition = score != null ? score.intValue() : 0;
-        }
-
-        int newPosition = maxPosition + 1;
-        redisTemplate.opsForZSet().add(queueKey, userId.toString(), newPosition);
+        redisTemplate.opsForZSet().add(queueKey, userId.toString(), System.currentTimeMillis());
+        redisTemplate.expire(queueKey, QUEUE_TTL_HOURS, TimeUnit.HOURS);
 
         String userTokenKey = USER_TOKEN_KEY + eventId + ":" + userId;
         String tokenUserKey = TOKEN_USER_KEY + eventId + ":" + visitorToken;
         redisTemplate.opsForValue().set(userTokenKey, visitorToken, SESSION_TTL_HOURS, TimeUnit.HOURS);
         redisTemplate.opsForValue().set(tokenUserKey, userId.toString(), SESSION_TTL_HOURS, TimeUnit.HOURS);
 
+        Long rank = redisTemplate.opsForZSet().rank(queueKey, userId.toString());
+        int position = rank != null ? rank.intValue() + 1 : 1;
+
         saveSession(eventId, userId, Map.of(
                 "visitorToken", visitorToken,
                 "status", "WAITING",
                 "joinedAt", LocalDateTime.now().toString(),
-                "queuePosition", String.valueOf(newPosition)
+                "queuePosition", String.valueOf(position)
         ));
 
-        log.info("User {} added to queue end at position {} for event {}", userId, newPosition, eventId);
-        return newPosition;
+        log.info("User {} added to queue end at position {} for event {}", userId, position, eventId);
+        return position;
     }
 
     /**
-     * Thêm user vào queue tại vị trí cụ thể
-     * @param eventId ID của event
-     * @param userId ID của user
-     * @param visitorToken Visitor token
-     * @param position Vị trí muốn chèn vào
+     * Thêm user vào queue tại vị trí cụ thể (dùng khi reconnect — khôi phục vị trí cũ).
      */
     public void addToQueueAtPosition(Long eventId, Long userId, String visitorToken, int position) {
         String queueKey = QUEUE_KEY + eventId;
@@ -326,7 +315,8 @@ public class WaitingRoomRedisService {
     }
 
     /**
-     * Set user status to READY (đến lượt)
+     * Set user status to READY (đến lượt). Remove khỏi queue ZSET để drain không re-admit.
+     * Thêm vào active ZSet (score = hạn phiên) — READY user đã "giữ" 1 slot capacity.
      */
     public void setUserReady(Long eventId, Long userId, String accessToken, int sessionTimeoutMinutes) {
         LocalDateTime now = LocalDateTime.now();
@@ -339,11 +329,16 @@ public class WaitingRoomRedisService {
                 "expiresAt", expiresAt.toString()
         ));
 
+        String queueKey = QUEUE_KEY + eventId;
+        redisTemplate.opsForZSet().remove(queueKey, userId.toString());
+
+        addActiveShopper(eventId, userId, expiresAt);
+
         log.debug("User {} is now READY for event {}", userId, eventId);
     }
 
     /**
-     * Set user status to SHOPPING (đã vào protected zone)
+     * Set user status to SHOPPING (đã vào protected zone). Gia hạn slot active.
      */
     public void setUserShopping(Long eventId, Long userId, int sessionTimeoutMinutes) {
         LocalDateTime now = LocalDateTime.now();
@@ -355,7 +350,7 @@ public class WaitingRoomRedisService {
                 "expiresAt", expiresAt.toString()
         ));
 
-        updateActiveShoppersCount(eventId, 1);
+        addActiveShopper(eventId, userId, expiresAt);
 
         log.debug("User {} is now SHOPPING for event {}", userId, eventId);
     }
@@ -369,7 +364,7 @@ public class WaitingRoomRedisService {
                 "completedAt", LocalDateTime.now().toString()
         ));
 
-        updateActiveShoppersCount(eventId, -1);
+        removeActiveShopper(eventId, userId);
 
         String queueKey = QUEUE_KEY + eventId;
         redisTemplate.opsForZSet().remove(queueKey, userId.toString());
@@ -381,16 +376,12 @@ public class WaitingRoomRedisService {
      * Set user status to EXPIRED
      */
     public void setUserExpired(Long eventId, Long userId) {
-        String currentStatus = getSessionStatus(eventId, userId);
-
         updateSession(eventId, userId, Map.of(
                 "status", "EXPIRED",
                 "completedAt", LocalDateTime.now().toString()
         ));
 
-        if ("SHOPPING".equals(currentStatus)) {
-            updateActiveShoppersCount(eventId, -1);
-        }
+        removeActiveShopper(eventId, userId);
 
         String queueKey = QUEUE_KEY + eventId;
         redisTemplate.opsForZSet().remove(queueKey, userId.toString());
@@ -417,7 +408,10 @@ public class WaitingRoomRedisService {
     }
 
     /**
-     * Kiểm tra user có trong queue không (pre-queue hoặc main queue)
+     * Kiểm tra user có đang ở trong waiting room flow không.
+     * True nếu: đang chờ trong pre-queue/main queue, HOẶC đã được admit nhưng
+     * chưa hoàn tất (READY/SHOPPING) — sau khi admit user bị remove khỏi ZSET
+     * nhưng session vẫn active cho tới khi COMPLETED/EXPIRED.
      */
     public boolean isUserInQueue(Long eventId, Long userId) {
         String preQueueKey = PRE_QUEUE_KEY + eventId;
@@ -427,7 +421,12 @@ public class WaitingRoomRedisService {
 
         String queueKey = QUEUE_KEY + eventId;
         Double score = redisTemplate.opsForZSet().score(queueKey, userId.toString());
-        return score != null;
+        if (score != null) {
+            return true;
+        }
+
+        String status = getSessionStatus(eventId, userId);
+        return "WAITING".equals(status) || "READY".equals(status) || "SHOPPING".equals(status);
     }
 
     /**
@@ -436,10 +435,9 @@ public class WaitingRoomRedisService {
     public void clearWaitingRoomData(Long eventId) {
         String preQueueKey = PRE_QUEUE_KEY + eventId;
         String queueKey = QUEUE_KEY + eventId;
-        String servingKey = SERVING_COUNTER_KEY + eventId;
-        String activeKey = ACTIVE_COUNTER_KEY + eventId;
+        String activeKey = ACTIVE_ZSET_KEY + eventId;
 
-        redisTemplate.delete(List.of(preQueueKey, queueKey, servingKey, activeKey));
+        redisTemplate.delete(List.of(preQueueKey, queueKey, activeKey));
 
         log.info("Cleared all Redis data for waiting room event {}", eventId);
     }
@@ -449,5 +447,31 @@ public class WaitingRoomRedisService {
      */
     public List<Map.Entry<Long, LocalDateTime>> getSessionsToCheck(Long eventId) {
         return Collections.emptyList();
+    }
+
+    /**
+     * Debug: dump full ZSET contents (userId → score) cho 1 event
+     */
+    public String inspectQueue(Long eventId) {
+        String queueKey = QUEUE_KEY + eventId;
+        String preQueueKey = PRE_QUEUE_KEY + eventId;
+        Set<ZSetOperations.TypedTuple<Object>> ranged =
+                redisTemplate.opsForZSet().rangeWithScores(queueKey, 0, -1);
+        Set<Object> preMembers = redisTemplate.opsForSet().members(preQueueKey);
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("preQueue=").append(preMembers == null ? "null" : preMembers);
+        sb.append(", queue=[");
+        if (ranged != null) {
+            boolean first = true;
+            for (ZSetOperations.TypedTuple<Object> t : ranged) {
+                if (!first) sb.append(",");
+                sb.append(t.getValue()).append("@").append(t.getScore());
+                first = false;
+            }
+        }
+        sb.append("]");
+        sb.append(", active=").append(getActiveShoppersCount(eventId));
+        return sb.toString();
     }
 }

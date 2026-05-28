@@ -28,9 +28,10 @@ public class OrderController {
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<OrderDTO> createOrder(
             @Valid @RequestBody CreateOrderRequest request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             HttpServletRequest httpRequest
     ) {
-        OrderDTO order = orderService.createOrder(request, httpRequest);
+        OrderDTO order = orderService.createOrder(request, httpRequest, idempotencyKey);
         return ResponseEntity.status(HttpStatus.CREATED).body(order);
     }
 

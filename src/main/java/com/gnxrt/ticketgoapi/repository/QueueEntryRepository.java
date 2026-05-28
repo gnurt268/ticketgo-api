@@ -21,7 +21,13 @@ public interface QueueEntryRepository extends JpaRepository<QueueEntry, Long> {
 
     Optional<QueueEntry> findByAccessToken(String accessToken);
 
-    Optional<QueueEntry> findByWaitingRoomIdAndUserId(Long waitingRoomId, Long userId);
+    // User có thể join lại sau khi EXPIRED/LEFT → có nhiều row trong DB cho cùng
+    // (waitingRoomId, userId). Trả về entry mới nhất theo joinedAt để các flow
+    // status update (admit, complete, expire) tác động vào lượt join hiện tại.
+    @Query("SELECT qe FROM QueueEntry qe WHERE qe.waitingRoom.id = :waitingRoomId " +
+            "AND qe.user.id = :userId ORDER BY qe.joinedAt DESC LIMIT 1")
+    Optional<QueueEntry> findByWaitingRoomIdAndUserId(@Param("waitingRoomId") Long waitingRoomId,
+                                                     @Param("userId") Long userId);
 
     boolean existsByWaitingRoomIdAndUserId(Long waitingRoomId, Long userId);
 

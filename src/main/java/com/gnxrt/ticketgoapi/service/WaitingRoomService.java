@@ -37,6 +37,7 @@ public class WaitingRoomService {
     private final EventRepository eventRepository;
     private final WaitingRoomRedisService redisService;
     private final BotDetectionService botDetectionService;
+    private final CaptchaService captchaService;
 
     /**
      * Tạo waiting room cho event
@@ -178,13 +179,19 @@ public class WaitingRoomService {
         }
 
         String fingerprint = joinRequest != null ? joinRequest.getFingerprint() : null;
+        String clientIp = getClientIp(request);
+
+        captchaService.verifyOrThrow(
+                joinRequest != null ? joinRequest.getCaptchaToken() : null,
+                clientIp
+        );
 
         long timeSinceOpen = waitingRoom.getPreQueueStart() != null
                 ? Math.max(0, Duration.between(waitingRoom.getPreQueueStart(), now).getSeconds())
                 : 0;
 
         boolean isBot = botDetectionService.isBot(
-                fingerprint, request.getHeader("User-Agent"), getClientIp(request),
+                fingerprint, request.getHeader("User-Agent"), clientIp,
                 true, timeSinceOpen, 0.0
         );
 
@@ -203,7 +210,7 @@ public class WaitingRoomService {
                 .visitorToken(visitorToken)
                 .joinedAt(now)
                 .status(QueueEntryStatus.WAITING)
-                .ipAddress(getClientIp(request))
+                .ipAddress(clientIp)
                 .userAgent(request.getHeader("User-Agent"))
                 .fingerprint(fingerprint)
                 .build();
@@ -303,6 +310,12 @@ public class WaitingRoomService {
         }
 
         String fingerprint = joinRequest != null ? joinRequest.getFingerprint() : null;
+        String clientIp = getClientIp(request);
+
+        captchaService.verifyOrThrow(
+                joinRequest != null ? joinRequest.getCaptchaToken() : null,
+                clientIp
+        );
 
         String visitorToken = generateVisitorToken();
         int position = redisService.addToQueueEnd(eventId, user.getId(), visitorToken);
@@ -314,7 +327,7 @@ public class WaitingRoomService {
                 .joinedAt(LocalDateTime.now())
                 .queuePosition(position)
                 .status(QueueEntryStatus.WAITING)
-                .ipAddress(getClientIp(request))
+                .ipAddress(clientIp)
                 .userAgent(request.getHeader("User-Agent"))
                 .fingerprint(fingerprint)
                 .build();
@@ -350,14 +363,36 @@ public class WaitingRoomService {
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy phòng chờ"));
 
         Long userId = user.getId();
+        Map<String, String> session = redisService.getSession(eventId, userId);
 
-        if (!redisService.isUserInQueue(eventId, userId)) {
+        if (session.isEmpty()) {
             throw new BadRequestException("Bạn chưa vào phòng chờ");
         }
 
-        Map<String, String> session = redisService.getSession(eventId, userId);
         String status = session.get("status");
         String visitorToken = session.get("visitorToken");
+
+        if ("EXPIRED".equals(status)) {
+            return QueueStatusResponse.builder()
+                    .waitingRoomId(waitingRoom.getId())
+                    .eventId(eventId)
+                    .eventTitle(waitingRoom.getEvent().getTitle())
+                    .visitorToken(visitorToken)
+                    .status(QueueEntryStatus.EXPIRED)
+                    .message("Phiên của bạn đã hết hạn. Vui lòng xếp hàng lại.")
+                    .build();
+        }
+
+        if ("COMPLETED".equals(status)) {
+            return QueueStatusResponse.builder()
+                    .waitingRoomId(waitingRoom.getId())
+                    .eventId(eventId)
+                    .eventTitle(waitingRoom.getEvent().getTitle())
+                    .visitorToken(visitorToken)
+                    .status(QueueEntryStatus.COMPLETED)
+                    .message("Bạn đã hoàn tất mua vé")
+                    .build();
+        }
 
         switch (waitingRoom.getStatus()) {
             case PRE_QUEUE:
@@ -507,14 +542,14 @@ public class WaitingRoomService {
 
         String status = session.get("status");
         if (!"READY".equals(status)) {
+            if ("EXPIRED".equals(status)) {
+                throw new BadRequestException("Phiên đã hết hạn. Vui lòng xếp hàng lại.");
+            }
             throw new BadRequestException("Bạn không trong trạng thái sẵn sàng");
         }
 
-        int activeSessions = redisService.getActiveShoppersCount(eventId);
-        if (activeSessions >= waitingRoom.getMaxConcurrentUsers()) {
-            throw new BadRequestException("Khu vực mua vé đang đầy, vui lòng chờ");
-        }
-
+        // Không cần check capacity ở đây — slot đã được giữ từ lúc setUserReady,
+        // drainQueue chỉ admit khi active < max nên user READY luôn có slot.
         redisService.setUserShopping(eventId, userId, waitingRoom.getSessionTimeoutMinutes());
 
         queueEntryRepository.findByWaitingRoomIdAndUserId(waitingRoom.getId(), userId)
@@ -568,14 +603,10 @@ public class WaitingRoomService {
             throw new BadRequestException("Bạn không có trong hàng chờ");
         }
 
-        String status = redisService.getSessionStatus(eventId, userId);
-
         if (waitingRoom.getStatus() == WaitingRoomStatus.PRE_QUEUE) {
             redisService.removeFromPreQueue(eventId, userId);
         } else {
-            if ("SHOPPING".equals(status)) {
-                redisService.updateActiveShoppersCount(eventId, -1);
-            }
+            // setUserExpired tự decrement active counter nếu prev status là READY/SHOPPING
             redisService.setUserExpired(eventId, userId);
         }
 
@@ -656,6 +687,7 @@ public class WaitingRoomService {
                 .secondsUntilPreQueue(secondsUntilPreQueue)
                 .secondsUntilSaleStart(secondsUntilSaleStart)
                 .canJoinNow(canJoinNow)
+                .captchaRequired(captchaService.isRequired())
                 .createdAt(waitingRoom.getCreatedAt())
                 .updatedAt(waitingRoom.getUpdatedAt())
                 .build();

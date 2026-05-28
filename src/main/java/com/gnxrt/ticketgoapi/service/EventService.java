@@ -279,6 +279,7 @@ public class EventService {
                 .eventType(event.getEventType())
                 .isFeatured(event.getIsFeatured())
                 .maxTicketsPerOrder(event.getMaxTicketsPerOrder())
+                .maxTicketsPerUser(event.getMaxTicketsPerUser())
                 .enableSeatSelection(event.getEnableSeatSelection())
                 .seatMapImageUrl(event.getSeatMapImageUrl())
                 .enableFaceRecognition(event.getEnableFaceRecognition())

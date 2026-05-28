@@ -40,6 +40,7 @@ public class WaitingRoomResponse {
     private Long secondsUntilPreQueue;
     private Long secondsUntilSaleStart;
     private Boolean canJoinNow;
+    private Boolean captchaRequired;
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

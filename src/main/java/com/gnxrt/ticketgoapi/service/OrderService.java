@@ -16,6 +16,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
@@ -46,19 +47,49 @@ public class OrderService {
     private final TicketRepository ticketRepository;
     private final SeatRepository seatRepository;
     private final UserRepository userRepository;
+    private final WaitingRoomRepository waitingRoomRepository;
+    private final WaitingRoomRedisService waitingRoomRedisService;
     private final VNPayService vnPayService;
     private final DistributedLockService distributedLockService;
     private final EmailService emailService;
     private final TransactionTemplate transactionTemplate;
+    private final OrderIdempotencyService idempotencyService;
 
     private static final int PAYMENT_TIMEOUT_MINUTES = 15;
     private static final long LOCK_WAIT_TIME = 5; // seconds
     private static final long LOCK_LEASE_TIME = 10; // seconds
     private static final int MAX_RETRY_ATTEMPTS = 2;
 
-    public OrderDTO createOrder(CreateOrderRequest request, HttpServletRequest httpRequest) {
+    public OrderDTO createOrder(CreateOrderRequest request, HttpServletRequest httpRequest, String idempotencyHeader) {
         log.info("Creating order for event: {}, zone: {}", request.getEventId(), request.getTicketZoneId());
 
+        User currentUser = getCurrentUser();
+        String idemKey = idempotencyService.resolveKey(idempotencyHeader, currentUser.getId(), request);
+
+        String existingOrderCode = idempotencyService.getCompletedOrderCode(idemKey);
+        if (existingOrderCode != null) {
+            log.info("Idempotent replay for key {} -> returning existing order {}", idemKey, existingOrderCode);
+            return getOrderByCode(existingOrderCode);
+        }
+
+        if (!idempotencyService.tryBegin(idemKey)) {
+            throw new ConflictException("Đơn của bạn đang được xử lý, vui lòng đợi giây lát.");
+        }
+
+        boolean committed = false;
+        try {
+            OrderDTO order = lockAndCreateOrder(request, httpRequest);
+            idempotencyService.markCompleted(idemKey, order.getOrderCode());
+            committed = true;
+            return order;
+        } finally {
+            if (!committed) {
+                idempotencyService.release(idemKey);
+            }
+        }
+    }
+
+    private OrderDTO lockAndCreateOrder(CreateOrderRequest request, HttpServletRequest httpRequest) {
         String ipAddress = vnPayService.getIpAddress(httpRequest);
         boolean hasSeatSelection = request.getSeatIds() != null && !request.getSeatIds().isEmpty();
 
@@ -139,6 +170,18 @@ public class OrderService {
             throw new BadRequestException("Sự kiện đã bắt đầu");
         }
 
+        // Nếu event có waiting room đang hoạt động, user phải qua phòng chờ trước.
+        waitingRoomRepository.findByEventId(event.getId()).ifPresent(wr -> {
+            if (Boolean.TRUE.equals(wr.getIsEnabled())
+                    && wr.getStatus() != WaitingRoomStatus.ENDED) {
+                String sessionStatus = waitingRoomRedisService.getSessionStatus(event.getId(), currentUser.getId());
+                if (!"SHOPPING".equals(sessionStatus)) {
+                    throw new ForbiddenException(
+                            "Sự kiện này yêu cầu vào phòng chờ trước khi đặt vé. Vui lòng vào phòng chờ để được cấp quyền mua vé.");
+                }
+            }
+        });
+
         TicketZone zone = ticketZoneRepository.findById(request.getTicketZoneId())
                 .orElseThrow(() -> new ResourceNotFoundException("TicketZone", "id", request.getTicketZoneId()));
 
@@ -186,6 +229,14 @@ public class OrderService {
 
         if (quantity > event.getMaxTicketsPerOrder()) {
             throw new BadRequestException("Không thể đặt quá " + event.getMaxTicketsPerOrder() + " vé mỗi đơn hàng");
+        }
+
+        // Giới hạn tổng vé còn hiệu lực mỗi tài khoản cho sự kiện này (fairness).
+        // Đếm trong cùng transaction + dưới seat/zone lock nên chính xác.
+        long alreadyOwned = ticketRepository.countActiveByEventAndUser(event.getId(), currentUser.getId());
+        if (alreadyOwned + quantity > event.getMaxTicketsPerUser()) {
+            throw new BadRequestException("Bạn chỉ được mua tối đa " + event.getMaxTicketsPerUser()
+                    + " vé cho sự kiện này (đã có " + alreadyOwned + ").");
         }
 
         List<CreateOrderRequest.AttendeeInfo> attendees = request.getAttendees();
@@ -284,6 +335,19 @@ public class OrderService {
             zone.setAvailableCapacity(zone.getAvailableCapacity() - quantity);
             zone.setReservedCapacity(zone.getReservedCapacity() + quantity);
             ticketZoneRepository.save(zone);
+        }
+
+        // Flush ngay trong transaction để bắt vi phạm chốt chặn cuối ở DB
+        // (uq_active_ticket_per_seat / CHECK capacity) trước khi commit — đây là lớp
+        // bảo vệ toàn vẹn cuối cùng kể cả khi Redis lock thất bại.
+        try {
+            ticketRepository.flush();
+        } catch (DataIntegrityViolationException e) {
+            log.warn("DB integrity guard rejected order for event {} user {}: {}",
+                    event.getId(), currentUser.getId(), e.getMostSpecificCause().getMessage());
+            throw new ConflictException(seats.isEmpty()
+                    ? "Vé vừa hết. Vui lòng thử lại."
+                    : "Ghế vừa được người khác đặt. Vui lòng chọn ghế khác.");
         }
 
         String description = "Thanh toan ve su kien: " + event.getTitle();
@@ -395,6 +459,17 @@ public class OrderService {
             eventRepository.save(event);
 
             orderRepository.save(order);
+
+            // Release waiting room slot — user đã hoàn tất mua vé, nhường slot cho người tiếp theo.
+            // Defensive: chỉ release nếu event có waiting room.
+            try {
+                if (waitingRoomRepository.existsByEventId(order.getEvent().getId())) {
+                    waitingRoomRedisService.setUserCompleted(order.getEvent().getId(), order.getUser().getId());
+                }
+            } catch (Exception ex) {
+                log.warn("Failed to release waiting room slot for order {} user {}: {}",
+                        orderCode, order.getUser().getId(), ex.getMessage());
+            }
 
             emailService.sendOrderConfirmationEmail(order, tickets);
 
@@ -628,45 +703,47 @@ public class OrderService {
         }
     }
 
-    @Transactional
     public void cancelExpiredOrderInTx(Long orderId) {
-        Order order = orderRepository.findById(orderId).orElse(null);
+        transactionTemplate.execute(status -> {
+            Order order = orderRepository.findById(orderId).orElse(null);
 
-        // Check trạng thái mới nhất trước khi cancel
-        if (order == null || order.getPaymentStatus() != PaymentStatus.PENDING) {
-            return;
-        }
-
-        order.setPaymentStatus(PaymentStatus.EXPIRED);
-
-        paymentRepository.findFirstByOrderIdAndStatusOrderByCreatedAtDesc(order.getId(), PaymentStatus.PENDING)
-                .ifPresent(p -> {
-                    p.setStatus(PaymentStatus.EXPIRED);
-                    paymentRepository.save(p);
-                });
-
-        List<Ticket> tickets = ticketRepository.findByOrderId(order.getId());
-        for (Ticket ticket : tickets) {
-            ticket.setStatus(TicketStatus.CANCELLED);
-            if (ticket.getSeat() != null) {
-                Seat seat = ticket.getSeat();
-                seat.setStatus(SeatStatus.AVAILABLE);
-                seat.setReservedBy(null);
-                seat.setReservedUntil(null);
-                seatRepository.save(seat);
+            // Check trạng thái mới nhất trước khi cancel
+            if (order == null || order.getPaymentStatus() != PaymentStatus.PENDING) {
+                return null;
             }
-        }
-        ticketRepository.saveAll(tickets);
 
-        if (!tickets.isEmpty()) {
-            TicketZone zone = tickets.get(0).getTicketZone();
-            zone.setAvailableCapacity(zone.getAvailableCapacity() + order.getQuantity());
-            zone.setReservedCapacity(Math.max(0, zone.getReservedCapacity() - order.getQuantity()));
-            ticketZoneRepository.save(zone);
-        }
+            order.setPaymentStatus(PaymentStatus.EXPIRED);
 
-        orderRepository.save(order);
-        log.info("Expired order cancelled: {}", order.getOrderCode());
+            paymentRepository.findFirstByOrderIdAndStatusOrderByCreatedAtDesc(order.getId(), PaymentStatus.PENDING)
+                    .ifPresent(p -> {
+                        p.setStatus(PaymentStatus.EXPIRED);
+                        paymentRepository.save(p);
+                    });
+
+            List<Ticket> tickets = ticketRepository.findByOrderId(order.getId());
+            for (Ticket ticket : tickets) {
+                ticket.setStatus(TicketStatus.CANCELLED);
+                if (ticket.getSeat() != null) {
+                    Seat seat = ticket.getSeat();
+                    seat.setStatus(SeatStatus.AVAILABLE);
+                    seat.setReservedBy(null);
+                    seat.setReservedUntil(null);
+                    seatRepository.save(seat);
+                }
+            }
+            ticketRepository.saveAll(tickets);
+
+            if (!tickets.isEmpty()) {
+                TicketZone zone = tickets.get(0).getTicketZone();
+                zone.setAvailableCapacity(zone.getAvailableCapacity() + order.getQuantity());
+                zone.setReservedCapacity(Math.max(0, zone.getReservedCapacity() - order.getQuantity()));
+                ticketZoneRepository.save(zone);
+            }
+
+            orderRepository.save(order);
+            log.info("Expired order cancelled: {}", order.getOrderCode());
+            return null;
+        });
     }
 
     private String generateOrderCode() {

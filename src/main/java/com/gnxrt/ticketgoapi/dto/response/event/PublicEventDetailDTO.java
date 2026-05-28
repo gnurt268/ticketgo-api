@@ -46,6 +46,8 @@ public class PublicEventDetailDTO {
 
     private Integer maxTicketsPerOrder;
 
+    private Integer maxTicketsPerUser;
+
     private Boolean enableSeatSelection;
 
     private String seatMapImageUrl;

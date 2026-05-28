@@ -37,6 +37,10 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
     @Query("SELECT t FROM Ticket t WHERE t.order.user.id = :userId AND t.event.id = :eventId AND t.status = 'ACTIVE'")
     List<Ticket> findActiveTicketsByUserAndEvent(@Param("userId") Long userId, @Param("eventId") Long eventId);
 
+    @Query("SELECT COUNT(t) FROM Ticket t WHERE t.event.id = :eventId " +
+            "AND t.order.user.id = :userId AND t.status IN ('PENDING', 'ACTIVE', 'USED')")
+    long countActiveByEventAndUser(@Param("eventId") Long eventId, @Param("userId") Long userId);
+
     Page<Ticket> findByHolderEmailOrderByCreatedAtDesc(String holderEmail, Pageable pageable);
 
     Long countByStatus(TicketStatus status);

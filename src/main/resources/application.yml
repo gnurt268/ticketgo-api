@@ -104,6 +104,12 @@ ai:
   service:
     url: ${AI_SERVICE_URL:http://localhost:8001}
 
+# CAPTCHA
+captcha:
+  enabled: ${CAPTCHA_ENABLED:true}
+  secret-key: ${CAPTCHA_SECRET_KEY:}
+  verify-url: ${CAPTCHA_VERIFY_URL:https://challenges.cloudflare.com/turnstile/v0/siteverify}
+
 # VNPay
 vnpay:
   tmn-code: ${VNPAY_TMN_CODE:}
@@ -138,6 +144,11 @@ app:
 # Server
 server:
   port: 8080
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
 
 # Actuator + Metrics
 management:

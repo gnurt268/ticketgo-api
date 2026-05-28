@@ -93,6 +93,10 @@ public class Event {
     @Builder.Default
     private Integer maxTicketsPerOrder = 10;
 
+    @Column(name = "max_tickets_per_user", nullable = false)
+    @Builder.Default
+    private Integer maxTicketsPerUser = 4;
+
     @Column(name = "enable_seat_selection", nullable = false)
     @Builder.Default
     private Boolean enableSeatSelection = false;

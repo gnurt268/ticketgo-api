@@ -141,10 +141,11 @@ public class WaitingRoomScheduler {
         int availableSlots = maxConcurrent - activeShoppers;
         int toAdmit = Math.min(usersPerBatch, availableSlots);
 
-        List<Long> nextUsers = redisService.getNextUsersToAdmit(eventId, toAdmit);
+        List<Long> nextUsers = redisService.popNextUsersToAdmit(eventId, toAdmit);
 
         if (nextUsers.isEmpty()) {
-            log.debug("No more users waiting in queue for event {}", eventId);
+            log.info("[drain] Event {} no users to admit. toAdmit={}, state={{{}}}",
+                    eventId, toAdmit, redisService.inspectQueue(eventId));
             return;
         }
 
@@ -155,10 +156,10 @@ public class WaitingRoomScheduler {
                 admitted++;
             } catch (Exception e) {
                 log.error("Error admitting user {} to event {}", userId, eventId, e);
+                // User đã bị pop khỏi queue — trả về đầu hàng để retry vòng kế, tránh mất lượt.
+                redisService.requeueAtFront(eventId, userId);
             }
         }
-
-        redisService.incrementServingPosition(eventId, admitted);
 
         log.info("Admitted {} users to event {}. Active shoppers: {}",
                 admitted, eventId, redisService.getActiveShoppersCount(eventId));
@@ -228,7 +229,7 @@ public class WaitingRoomScheduler {
             log.info("Expired SHOPPING session for user {} in event {}", uid, eventId);
         }
 
-        LocalDateTime readyTimeout = now.minusMinutes(2);
+        LocalDateTime readyTimeout = now.minusMinutes(5);
         List<QueueEntry> expiredReady = queueEntryRepository
                 .findExpiredReadyEntries(room.getId(), readyTimeout);
 

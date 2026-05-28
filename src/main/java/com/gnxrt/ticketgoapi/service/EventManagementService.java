@@ -350,6 +350,7 @@ public class EventManagementService {
                 .eventType(request.getEventType())
                 .isFeatured(false)
                 .maxTicketsPerOrder(request.getMaxTicketsPerOrder())
+                .maxTicketsPerUser(request.getMaxTicketsPerUser())
                 .enableSeatSelection(request.getEnableSeatSelection())
                 .seatMapImageUrl(request.getSeatMapImageUrl())
                 .enableFaceRecognition(request.getEnableFaceRecognition())
@@ -407,6 +408,7 @@ public class EventManagementService {
         event.setEndDate(request.getEndDate());
         event.setEventType(request.getEventType());
         event.setMaxTicketsPerOrder(request.getMaxTicketsPerOrder());
+        event.setMaxTicketsPerUser(request.getMaxTicketsPerUser());
         event.setEnableSeatSelection(request.getEnableSeatSelection());
         event.setSeatMapImageUrl(request.getSeatMapImageUrl());
         event.setEnableFaceRecognition(request.getEnableFaceRecognition());
@@ -662,6 +664,7 @@ public class EventManagementService {
                 .eventType(event.getEventType())
                 .isFeatured(event.getIsFeatured())
                 .maxTicketsPerOrder(event.getMaxTicketsPerOrder())
+                .maxTicketsPerUser(event.getMaxTicketsPerUser())
                 .enableSeatSelection(event.getEnableSeatSelection())
                 .seatMapImageUrl(event.getSeatMapImageUrl())
                 .enableFaceRecognition(event.getEnableFaceRecognition())

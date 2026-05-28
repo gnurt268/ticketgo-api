@@ -68,6 +68,11 @@ public class EventRequest {
     @Builder.Default
     private Integer maxTicketsPerOrder = 10;
 
+    @Min(value = 1, message = "Max tickets per user must be at least 1")
+    @Max(value = 50, message = "Max tickets per user must not exceed 50")
+    @Builder.Default
+    private Integer maxTicketsPerUser = 4;
+
     @Builder.Default
     private Boolean enableSeatSelection = false;
 
