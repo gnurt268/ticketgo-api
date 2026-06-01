@@ -17,7 +17,7 @@ public class CategoryRequest {
     @Size(max = 100, message = "Category name must not exceed 100 characters")
     private String name;
 
-    @NotBlank(message = "Category slug is required")
+    // Slug optional: nếu để trống sẽ tự sinh từ name (xem CategoryService.toSlug)
     @Size(max = 100, message = "Category slug must not exceed 100 characters")
     private String slug;
 

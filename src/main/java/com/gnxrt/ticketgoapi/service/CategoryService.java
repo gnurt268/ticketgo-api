@@ -11,8 +11,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
+import java.text.Normalizer;
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -61,8 +64,12 @@ public class CategoryService {
     public CategoryDTO createCategory(CategoryRequest request) {
         log.info("Creating new category: {}", request.getName());
 
-        if (categoryRepository.existsBySlug(request.getSlug())) {
-            throw new ConflictException("Slug danh mục đã tồn tại: " + request.getSlug());
+        String slug = StringUtils.hasText(request.getSlug())
+                ? request.getSlug().trim()
+                : generateUniqueSlug(request.getName());
+
+        if (categoryRepository.existsBySlug(slug)) {
+            throw new ConflictException("Slug danh mục đã tồn tại: " + slug);
         }
 
         if (categoryRepository.existsByName(request.getName())) {
@@ -74,13 +81,16 @@ public class CategoryService {
             displayOrder = (int) categoryRepository.count();
         }
 
+        // isActive có thể null khi client bỏ qua field (bẫy @Builder.Default) -> mặc định true
+        boolean isActive = request.getIsActive() == null || request.getIsActive();
+
         Category category = Category.builder()
                 .name(request.getName())
-                .slug(request.getSlug())
+                .slug(slug)
                 .description(request.getDescription())
                 .iconUrl(request.getIconUrl())
                 .displayOrder(displayOrder)
-                .isActive(request.getIsActive())
+                .isActive(isActive)
                 .build();
 
         category = categoryRepository.save(category);
@@ -96,9 +106,15 @@ public class CategoryService {
         Category category = categoryRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Category", "id", id));
 
-        if (!category.getSlug().equals(request.getSlug())
-                && categoryRepository.existsBySlug(request.getSlug())) {
-            throw new ConflictException("Slug danh mục đã tồn tại: " + request.getSlug());
+        String slug = StringUtils.hasText(request.getSlug())
+                ? request.getSlug().trim()
+                : (StringUtils.hasText(category.getSlug())
+                        ? category.getSlug()
+                        : generateUniqueSlug(request.getName()));
+
+        if (!category.getSlug().equals(slug)
+                && categoryRepository.existsBySlug(slug)) {
+            throw new ConflictException("Slug danh mục đã tồn tại: " + slug);
         }
 
         if (!category.getName().equals(request.getName())
@@ -107,10 +123,14 @@ public class CategoryService {
         }
 
         category.setName(request.getName());
-        category.setSlug(request.getSlug());
+        category.setSlug(slug);
         category.setDescription(request.getDescription());
         category.setIconUrl(request.getIconUrl());
-        category.setIsActive(request.getIsActive());
+
+        // Chỉ đổi trạng thái khi client gửi rõ ràng (tránh vô tình bật lại category đã ẩn)
+        if (request.getIsActive() != null) {
+            category.setIsActive(request.getIsActive());
+        }
 
         if (request.getDisplayOrder() != null) {
             category.setDisplayOrder(request.getDisplayOrder());
@@ -150,6 +170,36 @@ public class CategoryService {
 
         log.info("Category active status toggled to: {} for id: {}", category.getIsActive(), id);
         return mapToDTO(category);
+    }
+
+    /**
+     * Sinh slug duy nhất từ name, tự thêm hậu tố -2, -3... nếu trùng.
+     */
+    private String generateUniqueSlug(String name) {
+        String base = toSlug(name);
+        if (base.isEmpty()) {
+            base = "danh-muc";
+        }
+        String slug = base;
+        int suffix = 2;
+        while (categoryRepository.existsBySlug(slug)) {
+            slug = base + "-" + suffix++;
+        }
+        return slug;
+    }
+
+    /**
+     * Chuẩn hóa chuỗi tiếng Việt thành slug: bỏ dấu, đ->d, thường hóa,
+     * thay ký tự không phải [a-z0-9] bằng dấu gạch nối.
+     */
+    private String toSlug(String input) {
+        if (input == null) {
+            return "";
+        }
+        String s = input.trim().toLowerCase(Locale.forLanguageTag("vi"));
+        s = s.replace('đ', 'd');
+        s = Normalizer.normalize(s, Normalizer.Form.NFD).replaceAll("\\p{M}+", "");
+        return s.replaceAll("[^a-z0-9]+", "-").replaceAll("^-+|-+$", "");
     }
 
     private CategoryDTO mapToDTO(Category category) {

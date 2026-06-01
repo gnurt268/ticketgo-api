@@ -5,8 +5,11 @@ import com.gnxrt.ticketgoapi.dto.response.event.EventDetailDTO;
 import com.gnxrt.ticketgoapi.dto.response.event.EventListDTO;
 import com.gnxrt.ticketgoapi.dto.response.organizer.OrganizerDashboardDTO;
 import com.gnxrt.ticketgoapi.dto.response.organizer.RevenueStatisticsDTO;
+import com.gnxrt.ticketgoapi.dto.request.eventstaff.AssignStaffRequest;
+import com.gnxrt.ticketgoapi.dto.response.eventstaff.EventStaffDTO;
 import com.gnxrt.ticketgoapi.enums.EventStatus;
 import com.gnxrt.ticketgoapi.service.EventManagementService;
+import com.gnxrt.ticketgoapi.service.EventStaffService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -18,15 +21,17 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 
 @RestController
 @RequestMapping("/api/organizer/events")
-@PreAuthorize("hasAnyRole('ORGANIZER', 'ADMIN')")
+@PreAuthorize("hasRole('ORGANIZER')")
 @RequiredArgsConstructor
 public class OrganizerEventController {
 
     private final EventManagementService eventManagementService;
+    private final EventStaffService eventStaffService;
 
     /**
      * ORGANIZER
@@ -142,5 +147,39 @@ public class OrganizerEventController {
     public ResponseEntity<EventDetailDTO> getEventDetail(@PathVariable Long id) {
         EventDetailDTO event = eventManagementService.getEventDetail(id);
         return ResponseEntity.ok(event);
+    }
+
+    // ==================== Nhân viên check-in (EventStaff) ====================
+
+    /**
+     * GET /api/organizer/events/{eventId}/staff
+     */
+    @GetMapping("/{eventId}/staff")
+    public ResponseEntity<List<EventStaffDTO>> getEventStaff(@PathVariable Long eventId) {
+        return ResponseEntity.ok(eventStaffService.getStaff(eventId));
+    }
+
+    /**
+     * POST /api/organizer/events/{eventId}/staff
+     */
+    @PostMapping("/{eventId}/staff")
+    public ResponseEntity<EventStaffDTO> assignStaff(
+            @PathVariable Long eventId,
+            @Valid @RequestBody AssignStaffRequest request
+    ) {
+        EventStaffDTO dto = eventStaffService.assignStaff(eventId, request.getEmail());
+        return ResponseEntity.status(HttpStatus.CREATED).body(dto);
+    }
+
+    /**
+     * DELETE /api/organizer/events/{eventId}/staff/{userId}
+     */
+    @DeleteMapping("/{eventId}/staff/{userId}")
+    public ResponseEntity<Void> removeStaff(
+            @PathVariable Long eventId,
+            @PathVariable Long userId
+    ) {
+        eventStaffService.removeStaff(eventId, userId);
+        return ResponseEntity.noContent().build();
     }
 }

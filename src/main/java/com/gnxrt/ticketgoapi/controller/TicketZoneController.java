@@ -41,7 +41,7 @@ public class TicketZoneController {
      * GET /api/organizer/events/{eventId}/zones
      */
     @GetMapping("/organizer/events/{eventId}/zones")
-    @PreAuthorize("hasAnyRole('ORGANIZER', 'ADMIN')")
+    @PreAuthorize("hasRole('ORGANIZER')")
     public ResponseEntity<List<TicketZoneDTO>> getAllEventZones(@PathVariable Long eventId) {
         List<TicketZoneDTO> zones = ticketZoneService.getZonesByEventId(eventId);
         return ResponseEntity.ok(zones);
@@ -51,7 +51,7 @@ public class TicketZoneController {
      * POST /api/organizer/events/{eventId}/zones
      */
     @PostMapping("/organizer/events/{eventId}/zones")
-    @PreAuthorize("hasAnyRole('ORGANIZER', 'ADMIN')")
+    @PreAuthorize("hasRole('ORGANIZER')")
     public ResponseEntity<TicketZoneDTO> createZone(
             @PathVariable Long eventId,
             @Valid @RequestBody TicketZoneRequest request
@@ -64,7 +64,7 @@ public class TicketZoneController {
      * PUT /api/organizer/zones/{id}
      */
     @PutMapping("/organizer/zones/{id}")
-    @PreAuthorize("hasAnyRole('ORGANIZER', 'ADMIN')")
+    @PreAuthorize("hasRole('ORGANIZER')")
     public ResponseEntity<TicketZoneDTO> updateZone(
             @PathVariable Long id,
             @Valid @RequestBody TicketZoneRequest request
@@ -77,7 +77,7 @@ public class TicketZoneController {
      * DELETE /api/organizer/zones/{id}
      */
     @DeleteMapping("/organizer/zones/{id}")
-    @PreAuthorize("hasAnyRole('ORGANIZER', 'ADMIN')")
+    @PreAuthorize("hasRole('ORGANIZER')")
     public ResponseEntity<Void> deleteZone(@PathVariable Long id) {
         ticketZoneService.deleteZone(id);
         return ResponseEntity.noContent().build();
@@ -87,7 +87,7 @@ public class TicketZoneController {
      * PATCH /api/organizer/zones/{id}/toggle-active
      */
     @PatchMapping("/organizer/zones/{id}/toggle-active")
-    @PreAuthorize("hasAnyRole('ORGANIZER', 'ADMIN')")
+    @PreAuthorize("hasRole('ORGANIZER')")
     public ResponseEntity<TicketZoneDTO> toggleActive(@PathVariable Long id) {
         TicketZoneDTO zone = ticketZoneService.toggleActive(id);
         return ResponseEntity.ok(zone);
@@ -97,7 +97,7 @@ public class TicketZoneController {
      * PUT /api/organizer/events/{eventId}/zones/reorder
      */
     @PutMapping("/organizer/events/{eventId}/zones/reorder")
-    @PreAuthorize("hasAnyRole('ORGANIZER', 'ADMIN')")
+    @PreAuthorize("hasRole('ORGANIZER')")
     public ResponseEntity<Void> updateDisplayOrders(
             @PathVariable Long eventId,
             @RequestBody List<Long> zoneIds

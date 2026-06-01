@@ -96,7 +96,7 @@ public class SeatController {
      * POST /api/organizer/zones/{zoneId}/seats/generate
      */
     @PostMapping("/organizer/zones/{zoneId}/seats/generate")
-    @PreAuthorize("hasAnyRole('ORGANIZER', 'ADMIN')")
+    @PreAuthorize("hasRole('ORGANIZER')")
     public ResponseEntity<SeatMapDTO> generateSeats(
             @PathVariable Long zoneId,
             @Valid @RequestBody GenerateSeatsRequest request
@@ -109,7 +109,7 @@ public class SeatController {
      * DELETE /api/organizer/zones/{zoneId}/seats
      */
     @DeleteMapping("/organizer/zones/{zoneId}/seats")
-    @PreAuthorize("hasAnyRole('ORGANIZER', 'ADMIN')")
+    @PreAuthorize("hasRole('ORGANIZER')")
     public ResponseEntity<Void> deleteAllSeats(@PathVariable Long zoneId) {
         seatService.deleteAllSeats(zoneId);
         return ResponseEntity.noContent().build();

@@ -58,6 +58,7 @@ public class AuthController {
     }
 
     @GetMapping("/me")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<UserDTO> getCurrentUser() {
         UserDTO user = authService.getCurrentUser();
         return ResponseEntity.ok(user);
